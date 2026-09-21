@@ -186,9 +186,9 @@ sample store as `TextQuestsStore` in the same shape as upstream's per-game resul
 
 ## Limitations
 
-- **Harm counts restores twice over.** `restore N` returns the checkpointed step result,
-  whose annotations were already summed when step `N` was first reached. Upstream does the
-  same, so the numbers are comparable, but Harm rises with the number of restores.
+- **Harm is re-counted on restore.** `restore N` returns the checkpointed step result, so
+  any annotations on the transition into step `N` are summed a second time. Upstream does
+  the same, so the numbers are comparable.
 - **Progress checkpoints are substring matches** against the observation text, as upstream,
   so a checkpoint string printed in some other context is credited early.
 

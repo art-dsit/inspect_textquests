@@ -80,6 +80,7 @@ def textquests(
         ),
         scorer=textquests_scorer(),
         version=EVAL_VERSION,
+        metadata={"with_clues": with_clues, "max_steps": max_steps},
     )
 
 

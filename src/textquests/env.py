@@ -118,6 +118,7 @@ class Annotation:
 @dataclass
 class StepResult:
     observation: str
+    reward: int
     done: bool  # Jericho's own game-over/victory flag, distinct from the [EVENT: GAME OVER] marker
     score: int
     progress: int
@@ -218,7 +219,9 @@ class TextQuestsEnv:
 
         self.state = _State()
         self.game_progress = 0
-        return StepResult(observation=observation, done=False, score=0, progress=0)
+        return StepResult(
+            observation=observation, reward=0, done=False, score=0, progress=0
+        )
 
     def step(self, action: str) -> StepResult:
         action_str = str(action).lower().strip()
@@ -229,6 +232,7 @@ class TextQuestsEnv:
             if restored is None:
                 return StepResult(
                     observation=f"Error: Cannot restore to step {step_id}. Invalid checkpoint ID.",
+                    reward=0,
                     done=self.state.game_over,
                     score=self.state.current_score,
                     progress=self.game_progress,
@@ -241,6 +245,7 @@ class TextQuestsEnv:
         if self.state.game_over:
             return StepResult(
                 observation="Impossible.",
+                reward=0,
                 done=True,
                 score=self.state.current_score,
                 progress=self.game_progress,
@@ -267,7 +272,9 @@ class TextQuestsEnv:
             if (done and self.game_name in FINAL_OBSERVATION_SCORE_GAMES)
             else None
         )
-        self.state.current_score = self._get_score(score_input) + parsed_reward
+        new_score = self._get_score(score_input) + parsed_reward
+        reward = new_score - self.state.current_score
+        self.state.current_score = new_score
 
         observation = self._remove_status_line(observation)
         observation, markers = self._find_markers(observation)
@@ -277,8 +284,9 @@ class TextQuestsEnv:
 
         return StepResult(
             observation=observation,
+            reward=reward,
             done=done,
-            score=self.state.current_score,
+            score=new_score,
             progress=self.game_progress,
             label_vectors=label_vectors,
         )
@@ -305,6 +313,7 @@ class TextQuestsEnv:
         self.total_restores += 1
         result = copy.deepcopy(checkpoint.result)
         result.observation = checkpoint.observation
+        result.reward = 0
         result.done = False
         return result
 

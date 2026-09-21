@@ -44,13 +44,14 @@ class TestZork1:
         return TextQuestsEnv(data_dir / "zork1")
 
     def test_play(self, env: TextQuestsEnv) -> None:
-        observations = play(env, ["north", "east", "open window", "west"])
+        observations = play(env, ["north", "east", "open window"])
         assert observations[0].startswith("ZORK I: The Great Underground Empire")
         assert "[ID:" not in observations[0]
         assert "Score:" not in observations[0], "status line removed"
-        assert observations[-1].startswith("Kitchen\nYou are in the kitchen")
-        assert env.game_progress == 5, "first checkpoint in game_progress.json"
-        assert env.state.current_score == 10
+        result = env.step("west")
+        assert result.observation.startswith("Kitchen\nYou are in the kitchen")
+        assert result.progress == 5, "first checkpoint in game_progress.json"
+        assert result.score == 10 and result.reward == 10
 
     def test_death_restore_restart(self, env: TextQuestsEnv) -> None:
         observations = play(env, ZORK1_DEATH)
@@ -62,7 +63,7 @@ class TestZork1:
         restored = env.step("restore 2")
         assert restored.observation == observations[2]
         assert restored.observation.startswith("Behind House")
-        assert restored.score == 0 and restored.progress == 0
+        assert restored.score == 0 and restored.reward == 0 and restored.progress == 0
         assert env.game_progress == 5, "episode progress never decreases"
         assert env.total_restores == 1
 
