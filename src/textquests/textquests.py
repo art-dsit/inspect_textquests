@@ -1,29 +1,15 @@
 """TextQuests: How Good are LLMs at Text-Based Video Games?
 
-Long Phan, Mantas Mazeika, Andy Zou, Dan Hendrycks
-https://arxiv.org/abs/2507.23701
+Long Phan, Mantas Mazeika, Andy Zou, Dan Hendrycks. https://arxiv.org/abs/2507.23701
 
-Upstream: https://github.com/centerforaisafety/textquests (paper-era harness) and
-https://github.com/centerforaisafety/simple-evals/tree/main/textquests (maintained harness,
-which this implementation follows).
-
-# all 25 games, no clues (the headline setting)
-inspect eval textquests/textquests
-
-# with the InvisiClues hint booklets in the system prompt
-inspect eval textquests/textquests -T with_clues=true
-
-# a couple of games, short episodes
-inspect eval textquests/textquests -T games='["zork1","planetfall"]' -T max_steps=50
-
-# oracle run: replay the bundled walkthroughs instead of a model
-inspect eval textquests/textquests_walkthrough
+Follows the maintained upstream harness at
+https://github.com/centerforaisafety/simple-evals/tree/main/textquests.
 """
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 
-from textquests.game_info import GAME_INFO, GAMES
+from textquests.game_info import GAMES, MAX_SCORES
 from textquests.scorer import textquests_scorer
 from textquests.solver import (
     DEFAULT_MAX_RETRIES,
@@ -54,7 +40,7 @@ def games_dataset(games: str | list[str] | None = None) -> MemoryDataset:
             Sample(
                 input=f"Play the Infocom game {game}.",
                 id=game,
-                metadata={"game": game, "max_score": GAME_INFO[game].max_score},
+                metadata={"game": game, "max_score": MAX_SCORES[game]},
             )
             for game in selected
         ],
@@ -94,7 +80,6 @@ def textquests(
         ),
         scorer=textquests_scorer(),
         version=EVAL_VERSION,
-        metadata={"with_clues": with_clues, "max_steps": max_steps},
     )
 
 

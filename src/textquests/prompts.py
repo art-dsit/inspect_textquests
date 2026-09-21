@@ -1,17 +1,13 @@
-"""Prompt text, kept byte-for-byte identical to the maintained upstream harness.
+"""Prompt text, identical to the maintained upstream harness.
 
 Source: https://github.com/centerforaisafety/simple-evals/blob/main/textquests/textquests_eval.py
-(functions get_system_prompt, get_observation_prompt and the game-over block in
-play_single_game). The odd indentation of GAME_OVER_FORMAT is upstream's.
+(get_system_prompt, get_observation_prompt and the game-over block in play_single_game).
+The odd indentation of GAME_OVER_FORMAT is upstream's.
 """
 
 
 def system_prompt(
-    game_name: str,
-    max_score: int,
-    guidelines: str,
-    invisiclues: str,
-    with_clues: bool,
+    game_name: str, max_score: int, guidelines: str, invisiclues: str
 ) -> str:
     guidelines_prompt = ""
     if guidelines:
@@ -21,7 +17,7 @@ def system_prompt(
 """
 
     clues_prompt = ""
-    if with_clues and invisiclues:
+    if invisiclues:
         clues_prompt = f"""
 =====[Invisiclues]=====
 {invisiclues}

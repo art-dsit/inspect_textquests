@@ -47,20 +47,12 @@ def fake_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> bytes:
     return payload
 
 
-def test_cache_dir_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(data.CACHE_ENV_VAR, str(tmp_path))
-    assert data.cache_dir() == tmp_path
-    assert data.data_dir() == tmp_path / data.DATA_REVISION / "textquests"
-    monkeypatch.delenv(data.CACHE_ENV_VAR)
-    assert data.cache_dir() == Path.home() / ".cache" / "inspect_textquests"
-
-
 def test_ensure_data_downloads_verifies_and_extracts(
-    fake_download: bytes, monkeypatch: pytest.MonkeyPatch
+    fake_download: bytes, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(data, "DATA_SHA256", hashlib.sha256(fake_download).hexdigest())
     target = data.ensure_data()
-    assert target == data.data_dir()
+    assert target == tmp_path / "cache" / data.DATA_REVISION / "textquests"
     assert (target / "game_progress.json").read_text() == "{}"
     assert data.load_walkthrough("zork1") == ["open mailbox", "read leaflet"]
     assert not list(target.parent.glob("tmp*")), "temp dirs cleaned up"
@@ -75,6 +67,4 @@ def test_ensure_data_rejects_bad_hash(
     monkeypatch.setattr(data, "DATA_SHA256", "0" * 64)
     with pytest.raises(RuntimeError, match="sha256"):
         data.ensure_data()
-    assert not data.data_dir().exists(), (
-        "nothing left behind that could be mistaken for a cache"
-    )
+    assert not data.data_dir().exists(), "nothing left that looks like a cache"

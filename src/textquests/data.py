@@ -27,24 +27,17 @@ ZIP_ROOT = "textquests"
 CACHE_ENV_VAR = "INSPECT_TEXTQUESTS_CACHE"
 
 
-def cache_dir() -> Path:
-    override = os.environ.get(CACHE_ENV_VAR)
-    if override:
-        return Path(override).expanduser()
-    return Path.home() / ".cache" / "inspect_textquests"
-
-
 def data_dir() -> Path:
-    """Directory containing one sub-directory per game plus game_progress.json."""
-    return cache_dir() / DATA_REVISION / ZIP_ROOT
+    """One sub-directory per game plus game_progress.json."""
+    cache = os.environ.get(CACHE_ENV_VAR) or "~/.cache/inspect_textquests"
+    return Path(cache).expanduser() / DATA_REVISION / ZIP_ROOT
 
 
 def ensure_data() -> Path:
     """Return the data directory, downloading and extracting the zip if needed.
 
-    Safe to call concurrently: the zip is downloaded and extracted in a temp dir and moved
-    into place with a single rename, so a partial download is never mistaken for a complete
-    one. Concurrent first callers may each download a copy; the first rename wins.
+    Concurrent callers are safe: the tree is moved into place with a single rename, so a
+    partial download is never mistaken for a complete one.
     """
     target = data_dir()
     if not target.is_dir():
@@ -81,9 +74,7 @@ def _download_and_extract(target: Path) -> None:
         except OSError:
             if not target.is_dir():
                 raise
-            logger.info(
-                "Another process extracted the data first; discarding this copy"
-            )
+            logger.info("Another process extracted the data first")
     logger.info("TextQuests game data extracted to %s", target)
 
 

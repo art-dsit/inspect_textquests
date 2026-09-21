@@ -24,7 +24,7 @@ from typing import Any
 from jericho import FrotzEnv
 from jericho.jericho import UnsupportedGameWarning
 
-from textquests.game_info import GAME_INFO
+from textquests.game_info import BAD_ACTIONS, MAX_SCORES
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +118,9 @@ class Annotation:
 @dataclass
 class StepResult:
     observation: str
-    reward: int
     done: bool  # Jericho's own game-over/victory flag, distinct from the [EVENT: GAME OVER] marker
     score: int
     progress: int
-    moves: int
-    markers: list[Marker] = field(default_factory=list)
     label_vectors: list[LabelVector] = field(default_factory=list)
 
     @property
@@ -155,10 +152,9 @@ class TextQuestsEnv:
     def __init__(self, game_folder: Path, seed: int = 1) -> None:
         self.game_folder = Path(game_folder)
         self.game_name = self.game_folder.name
-        if self.game_name not in GAME_INFO:
+        if self.game_name not in MAX_SCORES:
             raise ValueError(f"Unknown game {self.game_name!r}")
-        self.info = GAME_INFO[self.game_name]
-        self.max_score = self.info.max_score
+        self.max_score = MAX_SCORES[self.game_name]
 
         progress_path = self.game_folder.parent / "game_progress.json"
         checkpoints = json.loads(progress_path.read_text())[self.game_name][
@@ -206,29 +202,23 @@ class TextQuestsEnv:
         self.state = _State()
         self.game_progress = 0
         self.checkpoints: list[Checkpoint] = []
-        # Unlike upstream these are cumulative across restarts, so they describe the whole episode
         self.total_restores = 0
         self.total_restarts = 0
 
         self.frotz.seed(seed)
         self.reset()
 
-    # ---- episode control -------------------------------------------------------------
-
     def reset(self) -> StepResult:
         observation, _ = self.frotz.reset()
         observation = self._replace_text(observation)
         observation = self._remove_status_line(observation)
-        # Upstream leaves any [ID: ...] markers in the opening text; we strip them without
-        # counting them so the model never sees annotation internals.
+        # Strip any markers in the opening text without counting them
         observation = MARKER_WITH_OBJECTS_RE.sub("", observation)
         observation = MARKER_RE.sub("", observation)
 
         self.state = _State()
         self.game_progress = 0
-        return StepResult(
-            observation=observation, reward=0, done=False, score=0, progress=0, moves=0
-        )
+        return StepResult(observation=observation, done=False, score=0, progress=0)
 
     def step(self, action: str) -> StepResult:
         action_str = str(action).lower().strip()
@@ -239,11 +229,9 @@ class TextQuestsEnv:
             if restored is None:
                 return StepResult(
                     observation=f"Error: Cannot restore to step {step_id}. Invalid checkpoint ID.",
-                    reward=0,
                     done=self.state.game_over,
                     score=self.state.current_score,
                     progress=self.game_progress,
-                    moves=self.state.steps,
                 )
             return restored
         if "restart" in action_str:
@@ -253,11 +241,9 @@ class TextQuestsEnv:
         if self.state.game_over:
             return StepResult(
                 observation="Impossible.",
-                reward=0,
                 done=True,
                 score=self.state.current_score,
                 progress=self.game_progress,
-                moves=self.state.steps,
             )
 
         warning = None
@@ -281,9 +267,7 @@ class TextQuestsEnv:
             if (done and self.game_name in FINAL_OBSERVATION_SCORE_GAMES)
             else None
         )
-        new_score = self._get_score(score_input) + parsed_reward
-        reward = new_score - self.state.current_score
-        self.state.current_score = new_score
+        self.state.current_score = self._get_score(score_input) + parsed_reward
 
         observation = self._remove_status_line(observation)
         observation, markers = self._find_markers(observation)
@@ -293,16 +277,11 @@ class TextQuestsEnv:
 
         return StepResult(
             observation=observation,
-            reward=reward,
             done=done,
-            score=new_score,
+            score=self.state.current_score,
             progress=self.game_progress,
-            moves=self.state.steps,
-            markers=markers,
             label_vectors=label_vectors,
         )
-
-    # ---- checkpoints -----------------------------------------------------------------
 
     def save_checkpoint(self, observation: str, result: StepResult) -> int:
         """Snapshot the current state; returns its id (== index, == step number when called once per step)."""
@@ -326,17 +305,14 @@ class TextQuestsEnv:
         self.total_restores += 1
         result = copy.deepcopy(checkpoint.result)
         result.observation = checkpoint.observation
-        result.reward = 0
         result.done = False
         return result
-
-    # ---- text processing -------------------------------------------------------------
 
     def _pre_step(
         self, action: str, parse_rewards: bool = False
     ) -> tuple[str, bool, int]:
         """Step the interpreter unless the action is blacklisted; expand compressed text."""
-        if any(re.search(bad, action.lower()) for bad in self.info.bad_actions):
+        if any(re.search(bad, action.lower()) for bad in BAD_ACTIONS[self.game_name]):
             observation, done = "Impossible.", False
         else:
             observation, _, done, _ = self.frotz.step(action)
@@ -366,8 +342,6 @@ class TextQuestsEnv:
         return observation, False
 
     def _match_progress(self, observation: str) -> int:
-        # Upstream's live loop keeps the *last* matching checkpoint but its offline metric
-        # (the reported number) takes the max; we take the max.
         lowered = observation.lower()
         return max(
             (pct for text, pct in self.progress_checkpoints.items() if text in lowered),
@@ -404,7 +378,6 @@ class TextQuestsEnv:
                 continue
             annotation = self.annotations.get(marker[0])
             if annotation is None:
-                # Rows with morality "N/A" aren't loaded; upstream would crash the episode here
                 logger.warning(
                     "%s: marker %s has no annotation, ignoring",
                     self.game_name,
@@ -423,8 +396,7 @@ class TextQuestsEnv:
                 kept.append(marker)
                 skip = True
             elif "-visited" in keywords[0]:
-                # Upstream has a typo here (slices the wrong end, then references an undefined
-                # name) so this branch crashed the episode. The CSV form is "<file>:<line>-visited".
+                # Upstream's version of this branch has a typo and raises NameError
                 visited_id = keywords[0].removesuffix("-visited")
                 if self.state.marker_counts.get(visited_id, 0) > 0:
                     kept.append(marker)
@@ -433,8 +405,6 @@ class TextQuestsEnv:
                     self.state.taken[marker[1]] = True
                     kept.append(marker)
         return kept
-
-    # ---- score parsing ---------------------------------------------------------------
 
     def _probe(self, command: str) -> str:
         """Run a command and roll the interpreter back, returning only its text."""
@@ -489,6 +459,10 @@ class TextQuestsEnv:
         if game in CUSTOM_REWARD_GAMES:
             return self.state.current_score
         raise NotImplementedError(f"Score parsing not implemented for {game}")
+
+
+def game_finished(progress: int, score: int, max_score: int) -> bool:
+    return progress == PROGRESS_COMPLETE or score == max_score
 
 
 def _verbs_go_last(markers: list[Marker]) -> list[Marker]:

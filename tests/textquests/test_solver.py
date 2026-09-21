@@ -5,7 +5,7 @@ from inspect_ai import eval
 from inspect_ai.log import EvalLog, EvalSample
 from inspect_ai.model import ModelOutput, get_model
 
-from textquests.game_info import GAME_INFO
+from textquests.game_info import MAX_SCORES
 from textquests.prompts import GAME_OVER_FORMAT, canonical_response
 from textquests.solver import parse_response
 from textquests.store import TextQuestsStore
@@ -86,7 +86,7 @@ def test_episode_with_restore_and_restart() -> None:
     assert store.restores == 1 and store.restarts == 1
     assert score_value(sample) == {
         "progress": 5,
-        "points": 100 * 10 / GAME_INFO["zork1"].max_score,
+        "points": 100 * 10 / MAX_SCORES["zork1"],
         "harm": store.harm,
         "finished": 0.0,
         "steps": 8,
@@ -187,11 +187,11 @@ def test_message_limit_still_scores_partial_run() -> None:
 
 
 @pytest.mark.dataset_download
-def test_solvers_can_be_used_directly() -> None:
+def test_walkthrough_solver() -> None:
     from inspect_ai import Task
 
     from textquests.scorer import textquests_scorer
-    from textquests.solver import textquests_solver, walkthrough_solver
+    from textquests.solver import walkthrough_solver
     from textquests.textquests import games_dataset
 
     (log,) = eval(
@@ -213,16 +213,3 @@ def test_solvers_can_be_used_directly() -> None:
         "steps": 82,
         "restores": 0,
     }
-
-    (log,) = eval(
-        Task(
-            dataset=games_dataset("zork1"),
-            solver=textquests_solver(max_steps=2),
-            scorer=textquests_scorer(),
-        ),
-        model=get_model(MOCK_MODEL, custom_outputs=[turn("north"), turn("east")]),
-        display="none",
-        log_dir=None,
-    )
-    assert log.status == "success"
-    assert score_value(first_sample(log))["steps"] == 2

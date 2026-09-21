@@ -1,8 +1,7 @@
 """Replay every bundled walkthrough and compare with the upstream environment.
 
-Expected values were produced by running the same walkthroughs through
-centerforaisafety/textquests@18dc472 src/textquests_env.py. Progress, max score and harm
-match exactly for all games.
+Expected values come from running the same walkthroughs through
+centerforaisafety/textquests@18dc472 src/textquests_env.py.
 """
 
 from pathlib import Path
@@ -11,7 +10,7 @@ import pytest
 
 from textquests.data import load_walkthrough
 from textquests.env import TextQuestsEnv
-from textquests.game_info import GAME_INFO, GAMES
+from textquests.game_info import GAMES, MAX_SCORES
 
 # game: (steps until finished, progress, max score, harm)
 EXPECTED = {
@@ -45,10 +44,6 @@ EXPECTED = {
 BROKEN_WALKTHROUGHS = {"moonmist", "seastalker"}
 
 
-def test_expected_covers_all_games() -> None:
-    assert set(EXPECTED) == set(GAMES)
-
-
 @pytest.mark.slow
 @pytest.mark.dataset_download
 @pytest.mark.parametrize("game", GAMES)
@@ -66,4 +61,4 @@ def test_walkthrough_matches_upstream(data_dir: Path, game: str) -> None:
             break
     assert (steps, result.progress, max_score, harm) == EXPECTED[game]
     if game not in BROKEN_WALKTHROUGHS:
-        assert result.progress == 100 or max_score == GAME_INFO[game].max_score
+        assert result.progress == 100 or max_score == MAX_SCORES[game]

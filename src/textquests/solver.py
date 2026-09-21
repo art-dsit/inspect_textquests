@@ -1,7 +1,7 @@
-"""Episode loop: one observation in, one parser command out, for up to max_steps turns.
+"""Episode loop, mirroring play_single_game in the maintained upstream harness.
 
-Mirrors play_single_game in the maintained upstream harness
-(https://github.com/centerforaisafety/simple-evals/blob/main/textquests/textquests_eval.py).
+Source: https://github.com/centerforaisafety/simple-evals/blob/main/textquests/textquests_eval.py
+
 Results accumulate in TextQuestsStore after every step so the scorer still has them if the
 sample is cut short by an Inspect limit or an error.
 """
@@ -23,7 +23,7 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai.util import store_as
 
 from textquests.data import ensure_data, load_walkthrough
-from textquests.env import PROGRESS_COMPLETE, StepResult, TextQuestsEnv
+from textquests.env import StepResult, TextQuestsEnv, game_finished
 from textquests.prompts import (
     GAME_OVER_FORMAT,
     canonical_response,
@@ -49,10 +49,6 @@ def parse_response(content: str) -> tuple[str, str | None]:
     return reasoning, action
 
 
-def game_finished(progress: int, score: int, max_score: int) -> bool:
-    return progress == PROGRESS_COMPLETE or score == max_score
-
-
 @solver
 def textquests_solver(
     max_steps: int = DEFAULT_MAX_STEPS,
@@ -68,10 +64,9 @@ def textquests_solver(
         with_clues: Include the game's InvisiClues hint booklet in the system prompt.
         max_retries: Attempts to get a parseable ``<action>`` before giving up on the game.
         seed: Seed for the Z-machine interpreter's random number generator.
-        canonicalize_history: Rewrite each assistant turn in the conversation history to the
-            bare ``<reasoning>/<action>`` form before the next turn, as upstream does. The
-            model's original output is still recorded in the transcript. Set False to keep the
-            raw output (including any reasoning blocks) in the history instead.
+        canonicalize_history: Rewrite each assistant turn in the history to the bare
+            ``<reasoning>/<action>`` form, as upstream does. The model's original output is
+            still in the transcript. Set False to keep the raw output in the history.
     """
     if max_steps < 1:
         raise ValueError(f"max_steps must be at least 1, got {max_steps}")
@@ -79,22 +74,16 @@ def textquests_solver(
         raise ValueError(f"max_retries must be at least 1, got {max_retries}")
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        game = str(state.metadata["game"])
         store = store_as(TextQuestsStore)
-        store.game = game
-
-        data = await anyio.to_thread.run_sync(ensure_data)
-        env = TextQuestsEnv(data / game, seed=seed)
+        env = await _make_env(state, seed)
         result = env.reset()
-
         state.messages = [
             ChatMessageSystem(
                 content=system_prompt(
-                    game_name=game,
+                    game_name=env.game_name,
                     max_score=env.max_score,
                     guidelines=env.guidelines,
-                    invisiclues=env.invisiclues,
-                    with_clues=with_clues,
+                    invisiclues=env.invisiclues if with_clues else "",
                 )
             )
         ]
@@ -142,7 +131,6 @@ def textquests_solver(
             store.steps = step + 1
 
             if game_finished(result.progress, result.score, env.max_score):
-                store.finished = True
                 store.ended = "finished"
                 break
 
@@ -157,6 +145,46 @@ def textquests_solver(
         return state
 
     return solve
+
+
+@solver
+def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
+    """Oracle: replay the game's bundled walkthrough instead of asking a model."""
+
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        store = store_as(TextQuestsStore)
+        env = await _make_env(state, seed)
+        result = env.reset()
+        for step, action in enumerate(load_walkthrough(env.game_name)):
+            store.log.append(
+                StepLog(
+                    step=step,
+                    observation=result.observation,
+                    score=result.score,
+                    progress=result.progress,
+                    game_over=result.done,
+                    reasoning="",
+                    action=action,
+                    label_vectors=result.label_vectors,
+                )
+            )
+            store.steps = step + 1
+            if game_finished(result.progress, result.score, env.max_score):
+                store.ended = "finished"
+                break
+            env.save_checkpoint(result.observation, result)
+            result = env.step(action)
+            _record(store, result, env)
+        else:
+            store.ended = "walkthrough_exhausted"
+        return state
+
+    return solve
+
+
+async def _make_env(state: TaskState, seed: int) -> TextQuestsEnv:
+    data = await anyio.to_thread.run_sync(ensure_data)
+    return TextQuestsEnv(data / str(state.metadata["game"]), seed=seed)
 
 
 async def _get_action(
@@ -181,47 +209,3 @@ def _record(store: TextQuestsStore, result: StepResult, env: TextQuestsEnv) -> N
     store.harm += result.harm
     store.restores = env.total_restores
     store.restarts = env.total_restarts
-
-
-@solver
-def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
-    """Oracle: replay the game's bundled walkthrough instead of asking a model.
-
-    Useful for checking the data and the environment (every walkthrough should reach 100%
-    progress or the max score) and as a ceiling when reading results.
-    """
-
-    async def solve(state: TaskState, generate: Generate) -> TaskState:
-        game = str(state.metadata["game"])
-        store = store_as(TextQuestsStore)
-        store.game = game
-
-        data = await anyio.to_thread.run_sync(ensure_data)
-        env = TextQuestsEnv(data / game, seed=seed)
-        result = env.reset()
-        for step, action in enumerate(load_walkthrough(game)):
-            store.log.append(
-                StepLog(
-                    step=step,
-                    observation=result.observation,
-                    score=result.score,
-                    progress=result.progress,
-                    game_over=result.done,
-                    reasoning="",
-                    action=action,
-                    label_vectors=result.label_vectors,
-                )
-            )
-            store.steps = step + 1
-            if game_finished(result.progress, result.score, env.max_score):
-                store.finished = True
-                store.ended = "finished"
-                break
-            env.save_checkpoint(result.observation, result)
-            result = env.step(action)
-            _record(store, result, env)
-        else:
-            store.ended = "walkthrough_exhausted"
-        return state
-
-    return solve

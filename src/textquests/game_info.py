@@ -1,15 +1,36 @@
-"""Per-game constants from the upstream harness.
+"""Per-game constants, copied from src/game_info.py in centerforaisafety/textquests (MIT)."""
 
-Max scores and the regexes for actions that can wedge the interpreter are copied from
-https://github.com/centerforaisafety/textquests/blob/main/src/game_info.py (MIT), which in
-turn derives from Hendrycks et al.'s Jiminy Cricket. Fields the harness never reads
-(player_object, tell_objects, finished_keywords, ...) are not carried over.
-"""
+MAX_SCORES: dict[str, int] = {
+    "ballyhoo": 205,
+    "borderzone": 40,
+    "cutthroats": 250,
+    "deadline": 17,
+    "enchanter": 400,
+    "hitchhiker": 410,
+    "hollywoodhijinx": 150,
+    "infidel": 410,
+    "lurkinghorror": 105,
+    "moonmist": 23,
+    "planetfall": 85,
+    "plunderedhearts": 25,
+    "seastalker": 105,
+    "sherlock": 100,
+    "sorcerer": 400,
+    "spellbreaker": 600,
+    "starcross": 400,
+    "stationfall": 80,
+    "suspect": 21,
+    "trinity": 105,
+    "wishbringer": 101,
+    "witness": 14,
+    "zork1": 360,
+    "zork2": 410,
+    "zork3": 8,
+}
 
-from dataclasses import dataclass, field
+GAMES = sorted(MAX_SCORES)
 
-# Actions that can send a game into an infinite loop or otherwise break the interpreter.
-# Matched case-insensitively against the lowercased action; a hit returns "Impossible.".
+# Actions that can hang or break the interpreter; matched case-insensitively, answered "Impossible."
 COMMON_BAD_ACTIONS = [
     "^brief.*",
     "^super.*",
@@ -21,57 +42,19 @@ COMMON_BAD_ACTIONS = [
     "^q$",
     "^quit$",
 ]
-
-
-@dataclass(frozen=True)
-class GameInfo:
-    max_score: int
-    bad_actions: list[str] = field(default_factory=lambda: list(COMMON_BAD_ACTIONS))
-
-
-GAME_INFO: dict[str, GameInfo] = {
-    "ballyhoo": GameInfo(max_score=205),
-    "borderzone": GameInfo(max_score=40),
-    "cutthroats": GameInfo(max_score=250),
-    "deadline": GameInfo(max_score=17),
-    "enchanter": GameInfo(max_score=400),
-    "hitchhiker": GameInfo(max_score=410),
-    "hollywoodhijinx": GameInfo(max_score=150),
-    "infidel": GameInfo(max_score=410),
-    "lurkinghorror": GameInfo(max_score=105),
-    "moonmist": GameInfo(max_score=23),
-    "planetfall": GameInfo(max_score=85),
-    "plunderedhearts": GameInfo(max_score=25),
-    "seastalker": GameInfo(
-        max_score=105,
-        bad_actions=[
-            "^(?:walk|go|run|proceed|steed|head|drive) (?!north|south|east|west|down|up|in|out)",
-            "^suspend.*",
-            "^pause.*",
-            *COMMON_BAD_ACTIONS,
-        ],
-    ),
-    "sherlock": GameInfo(max_score=100),
-    "sorcerer": GameInfo(max_score=400),
-    "spellbreaker": GameInfo(
-        max_score=600,
-        bad_actions=[
-            "^turn off zipper",
-            "^turn on zipper",
-            "^break .*? with zipper",
-            "^ride .*?zipper",
-            *COMMON_BAD_ACTIONS,
-        ],
-    ),
-    "starcross": GameInfo(max_score=400),
-    "stationfall": GameInfo(max_score=80),
-    "suspect": GameInfo(max_score=21),
-    "trinity": GameInfo(max_score=105),
-    "wishbringer": GameInfo(max_score=101),
-    "witness": GameInfo(max_score=14),
-    "zork1": GameInfo(max_score=360),
-    "zork2": GameInfo(max_score=410),
-    "zork3": GameInfo(max_score=8),
+EXTRA_BAD_ACTIONS = {
+    "seastalker": [
+        "^(?:walk|go|run|proceed|steed|head|drive) (?!north|south|east|west|down|up|in|out)",
+        "^suspend.*",
+        "^pause.*",
+    ],
+    "spellbreaker": [
+        "^turn off zipper",
+        "^turn on zipper",
+        "^break .*? with zipper",
+        "^ride .*?zipper",
+    ],
 }
-
-GAMES: list[str] = sorted(GAME_INFO)
+BAD_ACTIONS = {
+    game: EXTRA_BAD_ACTIONS.get(game, []) + COMMON_BAD_ACTIONS for game in GAMES
+}

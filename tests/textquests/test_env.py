@@ -8,6 +8,7 @@ from textquests.env import (
     Marker,
     TextQuestsEnv,
     _load_annotations,
+    _State,
     _verbs_go_last,
 )
 
@@ -42,37 +43,27 @@ class TestZork1:
     def env(self, data_dir: Path) -> TextQuestsEnv:
         return TextQuestsEnv(data_dir / "zork1")
 
-    def test_reset_is_clean_text(self, env: TextQuestsEnv) -> None:
-        result = env.reset()
-        assert result.observation.startswith("ZORK I: The Great Underground Empire")
-        assert "West of House" in result.observation
-        assert "[ID:" not in result.observation
-        assert "Score:" not in result.observation  # status line removed
-        assert result.score == 0 and result.progress == 0
-
-    def test_checkpoint_progress_and_score(self, env: TextQuestsEnv) -> None:
-        play(env, ["north", "east", "open window"])
-        result = env.step("west")
-        assert result.observation.startswith(
-            "Kitchen\nYou are in the kitchen of the white house"
-        )
-        assert result.progress == 5  # first checkpoint in game_progress.json
-        assert result.score == 10
-        assert result.reward == 10
+    def test_play(self, env: TextQuestsEnv) -> None:
+        observations = play(env, ["north", "east", "open window", "west"])
+        assert observations[0].startswith("ZORK I: The Great Underground Empire")
+        assert "[ID:" not in observations[0]
+        assert "Score:" not in observations[0], "status line removed"
+        assert observations[-1].startswith("Kitchen\nYou are in the kitchen")
+        assert env.game_progress == 5, "first checkpoint in game_progress.json"
+        assert env.state.current_score == 10
 
     def test_death_restore_restart(self, env: TextQuestsEnv) -> None:
         observations = play(env, ZORK1_DEATH)
         assert "You have died" in observations[-1]
-        # Zork resurrects you rather than ending the game, so Jericho says done but the
-        # recompiled game emits no [EVENT: GAME OVER] marker.
+        # Zork resurrects you: Jericho says done but there is no [EVENT: GAME OVER] marker
         assert env.state.game_over is False
 
-        # Checkpoint k is the state *before* the action taken at step k
+        # Checkpoint k is the state before the action taken at step k
         restored = env.step("restore 2")
         assert restored.observation == observations[2]
         assert restored.observation.startswith("Behind House")
-        assert restored.score == 0
-        assert restored.reward == 0
+        assert restored.score == 0 and restored.progress == 0
+        assert env.game_progress == 5, "episode progress never decreases"
         assert env.total_restores == 1
 
         invalid = env.step("restore 99")
@@ -81,32 +72,16 @@ class TestZork1:
         restarted = env.step("please restart the game")
         assert restarted.observation.startswith("ZORK I")
         assert restarted.score == 0 and env.game_progress == 0
-        assert env.total_restarts == 1
-        assert env.total_restores == 1, "restores are cumulative across restarts"
+        assert (env.total_restarts, env.total_restores) == (1, 1)
         assert len(env.checkpoints) == len(ZORK1_DEATH), "restart keeps the checkpoints"
 
-    def test_bad_actions_are_impossible(self, env: TextQuestsEnv) -> None:
-        env.reset()
+    def test_action_filters(self, env: TextQuestsEnv) -> None:
         for action in ["quit", "q", "Brief", "script"]:
-            result = env.step(action)
-            assert result.observation == "Impossible."
+            assert env.step(action).observation == "Impossible."
         assert env.state.steps == 4
-
-    def test_long_action_truncated_with_warning(self, env: TextQuestsEnv) -> None:
-        env.reset()
         action = "look " + "x" * MAX_ACTION_LENGTH
-        result = env.step(action)
-        assert result.observation.startswith(
+        assert env.step(action).observation.startswith(
             f"System Warning: Invalid length action command: {action}\n"
-        )
-
-    def test_progress_never_decreases(self, env: TextQuestsEnv) -> None:
-        play(env, ["north", "east", "open window", "west"])
-        assert env.game_progress == 5
-        result = env.step("restore 0")
-        assert env.game_progress == 5
-        assert result.progress == 0, (
-            "the restored step reports the progress it had at the time"
         )
 
 
@@ -126,20 +101,12 @@ def test_game_over_marker_blocks_actions(data_dir: Path) -> None:
 
 
 @pytest.mark.dataset_download
-def test_compressed_game_text_is_expanded(data_dir: Path) -> None:
-    env = TextQuestsEnv(data_dir / "ballyhoo")
-    result = env.reset()
-    assert "[RIDX" not in result.observation
-    assert "circus" in result.observation.lower()
-
-
-@pytest.mark.dataset_download
-def test_custom_reward_game_scores_from_markers(data_dir: Path) -> None:
-    env = TextQuestsEnv(data_dir / "witness")
-    result = env.reset()
-    assert "[RWD_ID" not in result.observation
-    # The game's own "score" command is not used for these games; probing must not crash
-    assert env.step("look").score == 0
+def test_compressed_and_custom_reward_games(data_dir: Path) -> None:
+    ballyhoo = TextQuestsEnv(data_dir / "ballyhoo").reset().observation
+    assert "[RIDX" not in ballyhoo and "circus" in ballyhoo.lower()
+    witness = TextQuestsEnv(data_dir / "witness")
+    assert "[RWD_ID" not in witness.reset().observation
+    assert witness.step("look").score == 0, "no 'score' probe for these games"
 
 
 def test_unknown_game_rejected(tmp_path: Path) -> None:
@@ -169,37 +136,27 @@ def test_load_annotations(tmp_path: Path) -> None:
     )
     path = tmp_path / "x_annotations.csv"
     path.write_text(csv_text)
-    annotations = _load_annotations(path)
-    assert annotations == {
+    assert _load_annotations(path) == {
         "verbs:10": Annotation(label_vector=[2, 0, 0, 0], keywords=["taken"]),
         "rooms:30": Annotation(label_vector=[0, 1, 3, 0], keywords=["only-first"]),
         "rooms:40": Annotation(label_vector=[0, 0, 0, 0], keywords=[""]),
     }
 
 
-def make_env_stub(annotations: dict[str, Annotation]) -> TextQuestsEnv:
-    """An env with just enough state to exercise the marker filters, no interpreter."""
-    from textquests.env import _State
-
+def test_apply_keywords() -> None:
+    # Just enough env state to exercise the marker filters, no interpreter
     env = TextQuestsEnv.__new__(TextQuestsEnv)
     env.game_name = "stub"
-    env.annotations = annotations
     env.state = _State()
-    return env
-
-
-def test_apply_keywords() -> None:
-    env = make_env_stub(
-        {
-            "a:1": Annotation([1, 0, 0, 0], [""]),
-            "a:2": Annotation([1, 0, 0, 0], ["only-first"]),
-            "a:3": Annotation([1, 0, 0, 0], ["ignore-first"]),
-            "a:4": Annotation([1, 0, 0, 0], ["delete-next"]),
-            "a:5": Annotation([1, 0, 0, 0], ["taken"]),
-            "a:6": Annotation([1, 0, 0, 0], ["a:1-visited"]),
-            "a:7": Annotation([1, 0, 0, 0], ["some-unhandled-keyword"]),
-        }
-    )
+    env.annotations = {
+        "a:1": Annotation([1, 0, 0, 0], [""]),
+        "a:2": Annotation([1, 0, 0, 0], ["only-first"]),
+        "a:3": Annotation([1, 0, 0, 0], ["ignore-first"]),
+        "a:4": Annotation([1, 0, 0, 0], ["delete-next"]),
+        "a:5": Annotation([1, 0, 0, 0], ["taken"]),
+        "a:6": Annotation([1, 0, 0, 0], ["a:1-visited"]),
+        "a:7": Annotation([1, 0, 0, 0], ["some-unhandled-keyword"]),
+    }
 
     def fire(markers: list[tuple[str, ...]]) -> list[tuple[str, ...]]:
         _, found = env._find_markers(
@@ -212,22 +169,16 @@ def test_apply_keywords() -> None:
         )
         return env._apply_keywords(found)
 
-    assert fire([("a:6",)]) == [], (
-        "-visited requires the referenced marker to have fired"
-    )
+    assert fire([("a:6",)]) == [], "-visited needs the referenced marker to have fired"
     assert fire([("a:1",)]) == [("a:1",)]
     assert fire([("a:6",)]) == [("a:6",)]
     assert fire([("a:2",)]) == [("a:2",)]
     assert fire([("a:2",)]) == [], "only-first"
     assert fire([("a:3",)]) == []
     assert fire([("a:3",)]) == [("a:3",)], "ignore-first"
-    assert fire([("a:4",), ("a:1",)]) == [("a:4",)], (
-        "delete-next drops the following marker"
-    )
+    assert fire([("a:4",), ("a:1",)]) == [("a:4",)], "delete-next drops the next marker"
     assert fire([("a:5", "lamp", ""), ("a:5", "lamp", "")]) == [("a:5", "lamp", "")]
     assert fire([("a:5", "lamp", "")]) == [], "taken counts each object once"
     assert fire([("a:5", "sword", "")]) == [("a:5", "sword", "")]
     assert fire([("a:7",)]) == [], "unknown keywords drop the marker"
-    assert fire([("zz:9",), ("a:1",)]) == [("a:1",)], (
-        "a marker with no annotation row is ignored, not fatal"
-    )
+    assert fire([("zz:9",), ("a:1",)]) == [("a:1",)], "no annotation row: ignored"

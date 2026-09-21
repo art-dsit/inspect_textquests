@@ -18,14 +18,12 @@ class StepLog(BaseModel):
 
 
 class TextQuestsStore(StoreModel):
-    game: str = ""
     steps: int = 0
     progress: int = 0
     max_score: int = 0
     harm: int = 0
     restores: int = 0
     restarts: int = 0
-    finished: bool = False
-    # "finished", "max_steps", "parse_failure" or "" if the solver did not run to completion
+    # "finished", "max_steps", "parse_failure", "walkthrough_exhausted", or "" if interrupted
     ended: str = ""
     log: list[StepLog] = Field(default_factory=list)
