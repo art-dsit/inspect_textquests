@@ -6,11 +6,9 @@ environment relies on), the annotations CSV, the walkthrough, the feelies and th
 InvisiClues. Stock Infocom game files will not work.
 """
 
-import fcntl
 import hashlib
 import logging
 import os
-import shutil
 import tempfile
 import zipfile
 from pathlib import Path
@@ -44,24 +42,14 @@ def data_dir() -> Path:
 def ensure_data() -> Path:
     """Return the data directory, downloading and extracting the zip if needed.
 
-    Safe to call concurrently from many processes: the download is serialised with a file
-    lock and the extracted tree is moved into place atomically, so a partial download can't
-    be mistaken for a complete one.
+    Safe to call concurrently: the zip is downloaded and extracted in a temp dir and moved
+    into place with a single rename, so a partial download is never mistaken for a complete
+    one. Concurrent first callers may each download a copy; the first rename wins.
     """
     target = data_dir()
-    if target.is_dir():
-        return target
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = target.parent / ".download.lock"
-    with open(lock_path, "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        try:
-            if target.is_dir():
-                return target
-            _download_and_extract(target)
-        finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+    if not target.is_dir():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _download_and_extract(target)
     return target
 
 
@@ -88,7 +76,14 @@ def _download_and_extract(target: Path) -> None:
         extract_dir = Path(tmp) / "extracted"
         with zipfile.ZipFile(zip_path) as zf:
             zf.extractall(extract_dir)
-        shutil.move(str(extract_dir / ZIP_ROOT), str(target))
+        try:
+            (extract_dir / ZIP_ROOT).rename(target)
+        except OSError:
+            if not target.is_dir():
+                raise
+            logger.info(
+                "Another process extracted the data first; discarding this copy"
+            )
     logger.info("TextQuests game data extracted to %s", target)
 
 

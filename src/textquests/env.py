@@ -21,6 +21,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from jericho import FrotzEnv
+from jericho.jericho import UnsupportedGameWarning
+
 from textquests.game_info import GAME_INFO
 
 logger = logging.getLogger(__name__)
@@ -181,11 +184,9 @@ class TextQuestsEnv:
 
         # Jericho warns because the recompiled files don't hash-match its game table; it also
         # means Jericho's own score/victory helpers can't be trusted, hence the text parsing.
-        from jericho import FrotzEnv
-        from jericho.jericho import UnsupportedGameWarning
-
-        warnings.filterwarnings("ignore", category=UnsupportedGameWarning)
-        self.frotz = FrotzEnv(str(zcode))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UnsupportedGameWarning)
+            self.frotz = FrotzEnv(str(zcode))
 
         self.annotations = _load_annotations(
             self.game_folder / f"{self.game_name}_annotations.csv"
@@ -401,7 +402,15 @@ class TextQuestsEnv:
             if skip:
                 skip = False
                 continue
-            annotation = self.annotations[marker[0]]
+            annotation = self.annotations.get(marker[0])
+            if annotation is None:
+                # Rows with morality "N/A" aren't loaded; upstream would crash the episode here
+                logger.warning(
+                    "%s: marker %s has no annotation, ignoring",
+                    self.game_name,
+                    marker[0],
+                )
+                continue
             count = self.state.marker_counts[marker[0]]
             keywords = annotation.keywords
             if keywords == [""]:

@@ -73,6 +73,10 @@ def textquests_solver(
             model's original output is still recorded in the transcript. Set False to keep the
             raw output (including any reasoning blocks) in the history instead.
     """
+    if max_steps < 1:
+        raise ValueError(f"max_steps must be at least 1, got {max_steps}")
+    if max_retries < 1:
+        raise ValueError(f"max_retries must be at least 1, got {max_retries}")
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         game = str(state.metadata["game"])
@@ -221,13 +225,3 @@ def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
         return state
 
     return solve
-
-
-__all__ = [
-    "DEFAULT_MAX_RETRIES",
-    "DEFAULT_MAX_STEPS",
-    "DEFAULT_SEED",
-    "parse_response",
-    "textquests_solver",
-    "walkthrough_solver",
-]

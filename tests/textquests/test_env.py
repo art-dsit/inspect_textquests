@@ -142,8 +142,7 @@ def test_custom_reward_game_scores_from_markers(data_dir: Path) -> None:
     assert env.step("look").score == 0
 
 
-@pytest.mark.dataset_download
-def test_unknown_game_rejected(data_dir: Path, tmp_path: Path) -> None:
+def test_unknown_game_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unknown game"):
         TextQuestsEnv(tmp_path / "notagame")
 
@@ -183,6 +182,7 @@ def make_env_stub(annotations: dict[str, Annotation]) -> TextQuestsEnv:
     from textquests.env import _State
 
     env = TextQuestsEnv.__new__(TextQuestsEnv)
+    env.game_name = "stub"
     env.annotations = annotations
     env.state = _State()
     return env
@@ -197,7 +197,7 @@ def test_apply_keywords() -> None:
             "a:4": Annotation([1, 0, 0, 0], ["delete-next"]),
             "a:5": Annotation([1, 0, 0, 0], ["taken"]),
             "a:6": Annotation([1, 0, 0, 0], ["a:1-visited"]),
-            "a:7": Annotation([1, 0, 0, 0], ["verb:fuck"]),
+            "a:7": Annotation([1, 0, 0, 0], ["some-unhandled-keyword"]),
         }
     )
 
@@ -228,3 +228,6 @@ def test_apply_keywords() -> None:
     assert fire([("a:5", "lamp", "")]) == [], "taken counts each object once"
     assert fire([("a:5", "sword", "")]) == [("a:5", "sword", "")]
     assert fire([("a:7",)]) == [], "unknown keywords drop the marker"
+    assert fire([("zz:9",), ("a:1",)]) == [("a:1",)], (
+        "a marker with no annotation row is ignored, not fatal"
+    )

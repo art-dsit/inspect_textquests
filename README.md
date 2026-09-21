@@ -13,6 +13,8 @@ uv sync
 uv run inspect eval textquests/textquests --model openai/gpt-5-mini
 ```
 
+Installing needs a C toolchain (Linux or macOS): the Jericho interpreter compiles Frotz.
+
 ## Development
 
 ```bash

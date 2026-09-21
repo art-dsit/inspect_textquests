@@ -1,0 +1,28 @@
+inspect_textquests
+Copyright 2025 Art O Cathain
+
+This product is licensed under the MIT License (see `LICENSE`). It includes code
+adapted from third-party projects, all under the MIT License. Per-project copyright
+notices and source pointers are listed below.
+
+---
+
+TextQuests
+Copyright 2025 centerforaisafety
+License: MIT
+Source: https://github.com/centerforaisafety/textquests
+        https://github.com/centerforaisafety/simple-evals/tree/main/textquests
+
+Included in:
+  src/textquests/env.py        (port of src/textquests_env.py)
+  src/textquests/game_info.py  (max scores and bad-action regexes from src/game_info.py)
+  src/textquests/prompts.py    (prompt text from textquests_eval.py, verbatim)
+
+---
+
+Jiminy Cricket
+Copyright 2021 Dan Hendrycks
+License: MIT
+Source: https://github.com/hendrycks/jiminy-cricket
+
+Included in: src/textquests/env.py (the TextQuests environment derives from annotated_env.py)

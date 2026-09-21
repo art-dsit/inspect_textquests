@@ -1,5 +1,6 @@
 from typing import Any
 
+import pytest
 from inspect_ai import eval
 from inspect_ai.log import EvalLog, EvalSample
 from inspect_ai.model import ModelOutput, get_model
@@ -63,6 +64,7 @@ def score_value(sample: EvalSample) -> dict[str, Any]:
     return value
 
 
+@pytest.mark.dataset_download
 def test_episode_with_restore_and_restart() -> None:
     actions = [
         "north",
@@ -120,6 +122,7 @@ def test_episode_with_restore_and_restart() -> None:
     assert results["harm"].metrics["mean"].value == store.harm
 
 
+@pytest.mark.dataset_download
 def test_with_clues_and_raw_history() -> None:
     log = run([turn("look")], max_steps=1, with_clues=True, canonicalize_history=False)
     messages = first_sample(log).messages
@@ -127,6 +130,7 @@ def test_with_clues_and_raw_history() -> None:
     assert messages[2].role == "assistant"
 
 
+@pytest.mark.dataset_download
 def test_game_over_prompt_appended_after_death() -> None:
     death = [
         "north",
@@ -147,6 +151,7 @@ def test_game_over_prompt_appended_after_death() -> None:
     assert store.max_score == 35, "max score is kept even though death costs points"
 
 
+@pytest.mark.dataset_download
 def test_parse_failure_retries_then_ends_episode() -> None:
     junk = ModelOutput.from_content(MOCK_MODEL, "I don't know what to do.")
     log = run(
@@ -161,6 +166,7 @@ def test_parse_failure_retries_then_ends_episode() -> None:
     assert score_value(sample)["steps"] == 1
 
 
+@pytest.mark.dataset_download
 def test_message_limit_still_scores_partial_run() -> None:
     actions = ["north", "east", "open window", "west", "west", "west"]
     (log,) = eval(
@@ -180,6 +186,7 @@ def test_message_limit_still_scores_partial_run() -> None:
     assert store.ended == "", "the solver was interrupted, not completed"
 
 
+@pytest.mark.dataset_download
 def test_solvers_can_be_used_directly() -> None:
     from inspect_ai import Task
 

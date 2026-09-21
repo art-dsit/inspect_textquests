@@ -29,3 +29,10 @@ def test_task_construction_needs_no_data(monkeypatch: pytest.MonkeyPatch) -> Non
     assert task.version == EVAL_VERSION
     assert task.metadata == {"with_clues": False, "max_steps": 500}
     assert len(textquests_walkthrough(games="zork1").dataset) == 1
+
+
+def test_invalid_parameters_rejected() -> None:
+    with pytest.raises(ValueError, match="max_steps"):
+        textquests(max_steps=0)
+    with pytest.raises(ValueError, match="max_retries"):
+        textquests(max_retries=0)
