@@ -1,0 +1,37 @@
+title: "TextQuests: How Good are LLMs at Text-Based Video Games?"
+description: |
+  An LLM agent plays each of 25 classic Infocom interactive-fiction games (Zork I-III,
+  Planetfall, The Hitchhiker's Guide to the Galaxy, ...) for up to 500 turns with the full
+  history in context and no external tools. Progress is measured against hand-annotated
+  checkpoints along each game's walkthrough; Points is in-game score as a fraction of the
+  maximum; Harm counts morally bad actions using the Jiminy Cricket annotations. Optionally
+  the official InvisiClues hint booklets are provided ("with clues").
+arxiv: https://arxiv.org/abs/2507.23701
+group: Reasoning
+tags:
+  - Agent
+  - Games
+  - Long-context
+contributors:
+  - art-dsit
+version: "1-A"
+tasks:
+  - name: textquests
+    dataset_samples: 25
+  - name: textquests_walkthrough
+    dataset_samples: 25
+
+external_assets:
+  - type: huggingface
+    source: "https://huggingface.co/datasets/justinphan3110/textquests"
+    fetch_method: other
+    state: pinned
+    comment: >
+      textquests_data.zip (191 MB) at revision be34a3a9821ba2dd4eb46096a55e9062f6b6d1db,
+      sha256-checked, downloaded on first use to ~/.cache/inspect_textquests. Contains the
+      Jiminy Cricket recompiled game files, annotations, walkthroughs, feelies and InvisiClues.
+
+metadata:
+  fast: false
+  requires:
+    internet: true
