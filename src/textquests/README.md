@@ -174,6 +174,10 @@ sample store as `TextQuestsStore` in the same shape as upstream's per-game resul
 - **A typo in the `-visited` annotation filter is fixed.** Upstream's branch raises
   `NameError`, crashing the episode for the two zork2 annotations that use it; it now fires
   once the referenced location has been visited, as the CSV says.
+- **Frotz's own `save` and bare `restore` are blocked** with "Impossible.", like `script`.
+  Upstream lets them through: `save` writes `<game>.qzl` into the working directory and
+  `restore` reloads it, a rewind that is not counted and that a later run of the same game
+  would pick up too. In our full runs three of 50 games typed `save`.
 - **Opening text is stripped of markers** (none of the 25 games currently print any there).
 - **Markers without an annotation row are ignored** with a warning (rows with morality
   `N/A` are not loaded; upstream crashes the episode if one fires). Likewise a `taken` marker
@@ -206,15 +210,22 @@ max score in 23 of 25 games, with the same numbers as the upstream environment
 
 ## Evaluation Report
 
-Smoke tests only so far (2026-09-21); the full 25-game runs needed to compare with the
-leaderboard have not been done.
+Full leaderboard-setting runs (25 games, 500 steps, no clues) on 2026-09-28, compared with
+Table 4 of the paper. Both models are pinned OpenAI snapshots served via a proxy; GPT-5 mini
+ran at `--reasoning-effort high` as upstream does. Every game ran the full 500 steps; no
+game was abandoned for unparseable output and none hit an Inspect limit.
 
-| Model | Setting | Games | Progress | Points | Harm | Notes |
+| Model | Progress (paper) | Harm (paper) | Points | Restores | Wall time | Tokens |
 | --- | --- | --- | --- | --- | --- | --- |
-| openai/gpt-5-mini, `--reasoning-effort low` | no clues, `max_steps=40` | zork1, planetfall | 7.5 | 5.6 | 5.0 | zork1: 15%, 3 deaths each followed by a `restore`. planetfall abandoned at step 13 after three replies without a closing `</action>` tag. |
-| anthropic/claude-haiku-4-5 | with clues, `max_steps=30` | wishbringer | 12.0 | 12.9 | 4.0 | Ran to the step limit. |
+| openai/gpt-5-mini-2025-08-07, effort high | 21.1 ± 4.1 (15.9) | 14.3 ± 2.6 (12.0) | 13.5 ± 2.2 | 8.4 | 8h 40m | 512M in (92% cached), 35.8M out, of which 34.2M reasoning |
+| openai/gpt-4.1-mini-2025-04-14 | 11.4 ± 3.3 (10.6) | 8.4 ± 2.1 (11.7) | 7.0 ± 1.6 | 3.1 | 17m | 448M in (98% cached), 0.7M out |
 
-gpt-5-mini at low reasoning effort often omits the closing `</action>` tag. The action regex
-is upstream's, so upstream abandons the game at the same point, but results for weak or
-low-effort models are partly a measure of tag discipline. Upstream ran its leaderboard at
-high reasoning effort.
+GPT-4.1 mini matches the paper within noise. GPT-5 mini scores 5 points higher than the paper's
+500-step number and about the same as its 800-step number (21.1); the paper gives no
+uncertainty, but our stderr of 4 over 25 games means a single run cannot distinguish a real
+gap from sampling variance. The eight games with progress 0 and the restore-heavy games
+(hitchhiker: 56 restores, no progress) are where most of the variance lives.
+
+Smoke tests from 2026-09-21 (`max_steps` 30–40, one or two games) showed gpt-5-mini at low
+reasoning effort often omits the closing `</action>` tag; at high effort this did not happen
+once in 12,500 steps.

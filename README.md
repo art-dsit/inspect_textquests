@@ -19,7 +19,7 @@ Installing needs a C toolchain (Linux or macOS): the Jericho interpreter compile
 
 ```bash
 uv sync --group dev
-uv run pytest                      # fast tests; add RUN_SLOW_TESTS=1 for the 25 walkthrough replays
+uv run pytest
 make check                         # ruff, mypy, inspect-evals-lint and the other repo checks
 ```
 

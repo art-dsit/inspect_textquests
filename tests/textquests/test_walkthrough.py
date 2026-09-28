@@ -44,7 +44,6 @@ EXPECTED = {
 BROKEN_WALKTHROUGHS = {"moonmist", "seastalker"}
 
 
-@pytest.mark.slow
 @pytest.mark.dataset_download
 @pytest.mark.parametrize("game", GAMES)
 def test_walkthrough_matches_upstream(data_dir: Path, game: str) -> None:

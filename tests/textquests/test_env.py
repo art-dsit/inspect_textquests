@@ -85,6 +85,21 @@ class TestZork1:
             f"System Warning: Invalid length action command: {action}\n"
         )
 
+    def test_frotz_save_and_restore_blocked(
+        self, env: TextQuestsEnv, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Unblocked, Frotz answers "Ok.", writes zork1.qzl to the cwd, and a bare "restore"
+        # reloads it: an uncounted rewind that a later run of the same game could also pick up.
+        monkeypatch.chdir(tmp_path)
+        play(env, ["north", "east", "open window", "west", "take sack"])
+        assert env.step("SAVE").observation == "Impossible."
+        assert env.step("drop sack").observation == "Dropped.\n\n"
+        assert env.step("restore").observation == "Impossible."
+        assert env.step("inventory").observation.startswith("You are empty-handed")
+        assert env.total_restores == 0
+        assert list(tmp_path.iterdir()) == []
+        assert env.step("restore 4").observation.startswith("Kitchen")
+
 
 @pytest.mark.dataset_download
 def test_game_over_marker_blocks_actions(data_dir: Path) -> None:

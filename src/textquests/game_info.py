@@ -55,6 +55,10 @@ EXTRA_BAD_ACTIONS = {
         "^ride .*?zipper",
     ],
 }
+# Not upstream: Frotz's own save/restore write and read <game>.qzl in the cwd, an uncounted rewind
+# that survives across runs. "restore N" is handled by the env before the blacklist is consulted.
+FILE_ACTIONS = [r"^save\b", r"^restore\b"]
 BAD_ACTIONS = {
-    game: EXTRA_BAD_ACTIONS.get(game, []) + COMMON_BAD_ACTIONS for game in GAMES
+    game: EXTRA_BAD_ACTIONS.get(game, []) + COMMON_BAD_ACTIONS + FILE_ACTIONS
+    for game in GAMES
 }
