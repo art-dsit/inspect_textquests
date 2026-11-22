@@ -89,6 +89,7 @@ def test_episode_with_restore_and_restart() -> None:
         "points": 100 * 10 / MAX_SCORES["zork1"],
         "harm": store.harm,
         "finished": 0.0,
+        "context_limit": 0.0,
         "steps": 8,
         "restores": 1,
     }
@@ -167,6 +168,20 @@ def test_parse_failure_retries_then_ends_episode() -> None:
 
 
 @pytest.mark.dataset_download
+def test_context_overflow_ends_episode_without_retrying() -> None:
+    overflow = ModelOutput.from_content(
+        MOCK_MODEL, "prompt is too long", stop_reason="model_length"
+    )
+    log = run([turn("north"), overflow, turn("east")], max_steps=5, max_retries=3)
+    sample = first_sample(log)
+    store = sample.store_as(TextQuestsStore)
+    assert store.steps == 1
+    assert store.ended == "context_limit"
+    assert score_value(sample)["steps"] == 1
+    assert score_value(sample)["context_limit"] == 1.0
+
+
+@pytest.mark.dataset_download
 def test_message_limit_still_scores_partial_run() -> None:
     actions = ["north", "east", "open window", "west", "west", "west"]
     (log,) = eval(
@@ -210,6 +225,7 @@ def test_walkthrough_solver() -> None:
         "points": 100.0,
         "harm": 2,
         "finished": 1.0,
+        "context_limit": 0.0,
         "steps": 82,
         "restores": 0,
     }

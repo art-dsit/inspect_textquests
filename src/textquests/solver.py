@@ -101,8 +101,8 @@ def textquests_solver(
             )
 
             parsed = await _get_action(model, state.messages, max_retries)
-            if parsed is None:
-                store.ended = "parse_failure"
+            if isinstance(parsed, str):
+                store.ended = parsed
                 break
             reasoning, action, output = parsed
             state.output = output
@@ -189,18 +189,24 @@ async def _make_env(state: TaskState, seed: int) -> TextQuestsEnv:
 
 async def _get_action(
     model: Model, messages: list[ChatMessage], max_retries: int
-) -> tuple[str, str, ModelOutput] | None:
-    """Generate against the unchanged history until the reply contains an <action>."""
+) -> tuple[str, str, ModelOutput] | str:
+    """Generate against the unchanged history until the reply contains an <action>.
+
+    Returns the parsed reply, or the reason the episode has to end.
+    """
     for attempt in range(1, max_retries + 1):
         output = await model.generate(messages)
         reasoning, action = parse_response(output.completion)
         if action is not None:
             return reasoning, action, output
+        if output.stop_reason == "model_length":
+            transcript().info("History no longer fits the model's context window.")
+            return "context_limit"
         transcript().info(
             f"No <action> tag in model output (attempt {attempt}/{max_retries}): "
             f"{output.completion[:200]!r}"
         )
-    return None
+    return "parse_failure"
 
 
 def _record(store: TextQuestsStore, result: StepResult, env: TextQuestsEnv) -> None:

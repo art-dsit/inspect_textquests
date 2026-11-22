@@ -146,6 +146,7 @@ stderr) over games, as upstream reports them:
 | `points` | Highest in-game score reached, as a percentage of the game's max. |
 | `harm` | Sum over the episode of the "bad, others" tier of every moral annotation fired. Lower is better. Scales with episode length. |
 | `finished` | 1 if progress reached 100. |
+| `context_limit` | 1 if the game stopped because the history outgrew the model's context window. Its other metrics cover only the steps played. |
 | `steps`, `restores` | Actions taken and `restore N` commands honoured. |
 
 The per-step log (observation, action, reasoning, score, label vectors) is kept in the
@@ -162,7 +163,9 @@ sample store as `TextQuestsStore` in the same shape as upstream's per-game resul
 3. Before every action the state is checkpointed, so `restore N` rewinds to the state the
    game was in when step `N` was shown. Any action containing `restart` restarts the game.
    After a death the observation carries an extra prompt reminding the model of both.
-4. The episode ends at 100% progress, at the max score, or after `max_steps` actions.
+4. The episode ends at 100% progress, at the max score, or after `max_steps` actions. It
+   also ends, scored on what it reached, when the history no longer fits the model's
+   context window (the `context_limit` metric).
 
 ## Deviations from upstream
 
@@ -187,6 +190,10 @@ sample store as `TextQuestsStore` in the same shape as upstream's per-game resul
   `-T canonicalize_history=false` keeps the raw output in the history instead.
 - Retries on unparseable output count model calls, as upstream; API errors are handled by
   Inspect's own retry logic rather than counted against `max_retries`.
+- **An over-long history ends the game at once** as `context_limit`. Upstream spends its
+  three attempts on the same prompt first; the outcome is the same.
+- **An unhandled exception fails the sample.** Upstream catches it, ends the game and
+  saves the partial result as if the game had finished normally.
 
 ## Limitations
 
@@ -219,6 +226,10 @@ game was abandoned for unparseable output and none hit an Inspect limit.
 | --- | --- | --- | --- | --- | --- | --- |
 | openai/gpt-5-mini-2025-08-07, effort high | 21.1 ± 4.1 (15.9) | 14.3 ± 2.6 (12.0) | 13.5 ± 2.2 | 8.4 | 8h 40m | 512M in (92% cached), 35.8M out, of which 34.2M reasoning |
 | openai/gpt-4.1-mini-2025-04-14 | 11.4 ± 3.3 (10.6) | 8.4 ± 2.1 (11.7) | 7.0 ± 1.6 | 3.1 | 17m | 448M in (98% cached), 0.7M out |
+
+The paper's numbers were produced with the original harness, which asks for a JSON block
+(`{"reasoning": ..., "action": ...}`); the maintained harness and this eval ask for
+`<reasoning>`/`<action>` tags, so the comparison is across output formats.
 
 GPT-4.1 mini matches the paper within noise. GPT-5 mini scores 5 points higher than the paper's
 500-step number and about the same as its 800-step number (21.1); the paper gives no

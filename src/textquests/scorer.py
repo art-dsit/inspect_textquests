@@ -16,6 +16,7 @@ from textquests.store import TextQuestsStore
             "points": [mean(), stderr()],
             "harm": [mean(), stderr()],
             "finished": [mean()],
+            "context_limit": [mean()],
             "steps": [mean()],
             "restores": [mean()],
         }
@@ -33,6 +34,7 @@ def textquests_scorer() -> Scorer:
                 "points": 100 * store.max_score / max_score,
                 "harm": store.harm,
                 "finished": 1.0 if finished else 0.0,
+                "context_limit": 1.0 if store.ended == "context_limit" else 0.0,
                 "steps": store.steps,
                 "restores": store.restores,
             },
