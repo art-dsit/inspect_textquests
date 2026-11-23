@@ -188,6 +188,19 @@ def test_episode_with_restore_and_restart() -> None:
 
 
 @pytest.mark.dataset_download
+def test_result_of_the_last_action_is_not_scored() -> None:
+    # As upstream: metrics come from the log, which holds the state before each action.
+    # The fourth action reaches the Kitchen, zork1's first checkpoint and first points.
+    log = run([turn(a) for a in ["north", "east", "open window", "west"]], max_steps=4)
+    sample = first_sample(log)
+    store = sample.store_as(TextQuestsStore)
+    assert (store.progress, store.max_score) == (5, 10), "live values"
+    value = score_value(sample)
+    assert (value["progress"], value["points"]) == (0, 0.0)
+    assert value["verified_progress"] == 100 * 1 / 13
+
+
+@pytest.mark.dataset_download
 def test_with_clues_and_raw_history() -> None:
     log = run([turn("look")], max_steps=1, with_clues=True, canonicalize_history=False)
     messages = first_sample(log).messages

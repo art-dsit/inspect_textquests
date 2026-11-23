@@ -158,6 +158,7 @@ def textquests_solver(
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         store = store_as(TextQuestsStore)
+        store.verified = verified
         env = await _make_env(state, seed, verified)
         result = env.reset()
         state.messages = [
@@ -249,9 +250,13 @@ def walkthrough_solver(seed: int = DEFAULT_SEED, verified: bool = False) -> Solv
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         store = store_as(TextQuestsStore)
+        store.verified = verified
         env = await _make_env(state, seed, verified)
         result = env.reset()
-        for step, action in enumerate(load_walkthrough(env.game_name, fixed=True)):
+        actions = load_walkthrough(env.game_name, fixed=True)
+        # One entry more than there are actions: the state after the last one is logged as
+        # upstream's loop would log it before asking for another action
+        for step, action in enumerate([*actions, ""]):
             store.log.append(
                 StepLog(
                     step=step,
@@ -264,15 +269,18 @@ def walkthrough_solver(seed: int = DEFAULT_SEED, verified: bool = False) -> Solv
                     label_vectors=result.label_vectors,
                 )
             )
-            store.steps = step + 1
+            exhausted = step == len(actions)
+            if not exhausted:
+                store.steps = step + 1
             if _finished(env, result, verified):
                 store.ended = "finished"
+                break
+            if exhausted:
+                store.ended = "walkthrough_exhausted"
                 break
             env.save_checkpoint(result.observation, result)
             result = env.step(action)
             _record(store, result, env)
-        else:
-            store.ended = "walkthrough_exhausted"
         return state
 
     return solve

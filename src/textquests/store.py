@@ -19,6 +19,9 @@ class StepLog(BaseModel):
 
 class TextQuestsStore(StoreModel):
     steps: int = 0
+    # Played in the verified environment, and scored from the live values below
+    verified: bool = False
+    # Live values over every step's result; the base task reports metrics from `log` instead
     progress: int = 0
     max_score: int = 0
     harm: int = 0
