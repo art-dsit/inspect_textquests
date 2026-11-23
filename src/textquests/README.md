@@ -215,7 +215,8 @@ tell play from recall of these games' published solutions.
 - **Progress is matched on the cleaned observation**, the text the model sees. Upstream's
   live loop matches the raw interpreter output, where an annotation marker can sit inside a
   checkpoint string and hide it; its reported metric is recomputed offline from the cleaned
-  text. On the walkthroughs this changes suspect's 35% checkpoint and borderzone's 100%.
+text. The raw text also carries the markers' own fields, which can contain a checkpoint
+  string. On the walkthroughs this changes suspect's 35% checkpoint and borderzone's 100%.
 - **Progress within one observation is the max** matching checkpoint. Upstream's live loop
   took the last match in file order; its offline metric (the reported one) takes the max.
 - **`restores` is cumulative across restarts.** Upstream zeroes the counter on `restart`.
@@ -312,9 +313,12 @@ none through Chat Completions. Eight other replies were refused by OpenAI's prom
 The run has not been repeated with `-M responses_api=false`.
 
 The GPT-4.1 and GPT-5 runs predate two changes to scoring. Rescored from the observations
-in their logs, progress matched on the cleaned text is 22.8 ± 4.6 and 38.0 ± 5.0 (suspect's
-35% checkpoint was being missed in both), and `verified_progress` is 17.0 ± 3.4 and
-26.4 ± 4.1. The rescoring cannot see the observation after each game's last action.
+in their logs, progress matched on the cleaned text is 20.0 ± 4.3 and 38.0 ± 5.0, and
+`verified_progress` is 17.0 ± 3.4 and 26.4 ± 4.1. Matching the raw text had missed suspect's
+35% checkpoint in both runs, and had credited GPT-4.1 with lurkinghorror's 70% ("bolt
+cutter") from an annotation marker that names the object, `[ID: …, PRSO: bolt cutter, …]`,
+in a turn where the player is killed. The rescoring cannot see the observation after each
+game's last action.
 
 GPT-4.1 and GPT-4.1 mini match the paper within noise. GPT-5 mini scores 5 points higher than the paper's
 500-step number and about the same as its 800-step number (21.1); the paper gives no
