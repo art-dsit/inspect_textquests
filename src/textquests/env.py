@@ -111,6 +111,8 @@ REWARD_RE = re.compile(r"\[RWD_ID: ([^:]*?:[0-9]*), VAL:(.*?)\]")
 GAME_OVER_RE = re.compile(r"\[EVENT: GAME OVER\]")
 RESTORE_RE = re.compile(r"restore\s+(\d+)")
 COMMAND_SEPARATOR_RE = re.compile(r"\.|\bthen\b")
+# Wider than COMMAND_SEPARATOR_RE: a restart that reached the interpreter would not be counted
+RESTART_SEPARATOR_RE = re.compile(r"[.,;!?]|\bthen\b")
 # One status-line redraw in verified mode. Redraws during a multi-turn wait come one per game
 # minute, often run together on one line, and the game's own text can follow on that line.
 # The location name is single-spaced and padded to the right-hand fields.
@@ -186,7 +188,8 @@ class TextQuestsEnv:
             verified: Fix the environment faults shared with upstream: report game over
                 exactly when actions are refused, detect the endings that print no
                 [EVENT: GAME OVER] marker, read the score on the final turn, strip every
-                status-line redraw, and rejoin compressed text split across reads.
+                status-line redraw, rejoin compressed text split across reads, and restart
+                only on a RESTART command.
         """
         self.game_folder = Path(game_folder)
         self.verified = verified
@@ -287,7 +290,7 @@ class TextQuestsEnv:
                     progress=self.game_progress,
                 )
             return restored
-        if "restart" in action_str:
+        if self._is_restart(action_str):
             self.total_restarts += 1
             return self.reset()
 
@@ -417,6 +420,14 @@ class TextQuestsEnv:
             self.held_word = held.group(0)
             observation += self.held_word
         return observation
+
+    def _is_restart(self, action: str) -> bool:
+        if not self.verified:
+            return "restart" in action
+        return any(
+            command.strip() == "restart"
+            for command in RESTART_SEPARATOR_RE.split(action)
+        )
 
     def _unmarked_ending(self, observation: str) -> tuple[str, bool]:
         """Detect an ending that prints no [EVENT: GAME OVER] marker, or a halted interpreter.

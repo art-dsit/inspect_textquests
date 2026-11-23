@@ -316,6 +316,18 @@ def test_verified_compressed_prompt_split_across_reads_is_rejoined(
     assert '"Smart move," sniggers a voice in your ear.' in observations[-1]
 
 
+@pytest.mark.dataset_download
+def test_verified_restart_only_on_the_restart_command(data_dir: Path) -> None:
+    env = TextQuestsEnv(data_dir / "zork1", verified=True)
+    play(env, ["north", "east", "open window", "west"])
+    for action in ['say "restart"', "computer, restart the countdown", "restarted"]:
+        assert not env.step(action).observation.startswith("ZORK I"), action
+    assert env.total_restarts == 0
+    assert env.step("look. restart").observation.startswith("ZORK I")
+    assert env.step("Restart!").observation.startswith("ZORK I")
+    assert env.total_restarts == 2
+
+
 def test_unknown_game_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unknown game"):
         TextQuestsEnv(tmp_path / "notagame")
