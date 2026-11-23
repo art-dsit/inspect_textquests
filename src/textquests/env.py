@@ -123,6 +123,10 @@ SCORE_MOVES_STATUS_RE = re.compile(
 )
 # The markers printed with an ending's text, which belong to it
 ENDING_TAIL_RE = re.compile(r"(?:\s*\[(?:RWD_)?ID: [^\]]*\])*")
+# The interpreter holds back the last word printed before it reads input, so a compressed
+# string that is the game's prompt arrives as "[RIDX:" with " 64]" at the start of the next output
+SPLIT_REPLACEMENT_RE = re.compile(r"\[RIDX:$")
+HELD_WORD_RE = re.compile(r" ?\d+\]")
 
 LabelVector = list[int]  # [bad-others, bad-self, good-others, good-self]
 Marker = tuple[str, ...]  # (id,) or (id, prso, prsi)
@@ -181,8 +185,8 @@ class TextQuestsEnv:
             seed: Seed for the Z-machine interpreter's random number generator.
             verified: Fix the environment faults shared with upstream: report game over
                 exactly when actions are refused, detect the endings that print no
-                [EVENT: GAME OVER] marker, read the score on the final turn, and strip
-                every status-line redraw.
+                [EVENT: GAME OVER] marker, read the score on the final turn, strip every
+                status-line redraw, and rejoin compressed text split across reads.
         """
         self.game_folder = Path(game_folder)
         self.verified = verified
@@ -246,6 +250,7 @@ class TextQuestsEnv:
 
         self.state = _State()
         self.game_progress = 0
+        self.held_word = ""
         self.checkpoints: list[Checkpoint] = []
         self.total_restores = 0
         self.total_restarts = 0
@@ -388,11 +393,29 @@ class TextQuestsEnv:
             observation, done = "Impossible.", False
         else:
             observation, _, done, _ = self.frotz.step(action)
+            if self.verified and self.replacement_dict:
+                observation = self._rejoin_held_word(observation)
         return self._replace_text(observation), done
 
     def _replace_text(self, observation: str) -> str:
         for key, replacement in self.replacement_dict.items():
             observation = observation.replace(f"[RIDX: {key}]", replacement)
+        return observation
+
+    def _rejoin_held_word(self, observation: str) -> str:
+        """Complete a compressed-string marker whose number the interpreter held back."""
+        observation = observation.removeprefix(self.held_word)
+        self.held_word = ""
+        if not SPLIT_REPLACEMENT_RE.search(observation):
+            return observation
+        # An empty input, rolled back, makes the interpreter print what it held
+        saved = copy.deepcopy(self.frotz.get_state())
+        continuation, _, _, _ = self.frotz.step("")
+        self.frotz.set_state(saved)
+        held = HELD_WORD_RE.match(continuation)
+        if held:
+            self.held_word = held.group(0)
+            observation += self.held_word
         return observation
 
     def _unmarked_ending(self, observation: str) -> tuple[str, bool]:
@@ -502,9 +525,11 @@ class TextQuestsEnv:
     def _probe(self, command: str) -> str:
         """Run a command and roll the interpreter back, returning only its text."""
         saved = (copy.deepcopy(self.frotz.get_state()), copy.deepcopy(self.state))
+        held_word = self.held_word
         observation, _ = self._pre_step(command)
         self.frotz.set_state(saved[0])
         self.state = saved[1]
+        self.held_word = held_word
         return observation
 
     def _parse_score(self, regex: str, score_input: str | None) -> int:

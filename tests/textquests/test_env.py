@@ -303,6 +303,19 @@ def test_verified_status_line_redraws_removed_and_event_text_kept(
         assert text in joined
 
 
+@pytest.mark.dataset_download
+def test_verified_compressed_prompt_split_across_reads_is_rejoined(
+    data_dir: Path,
+) -> None:
+    env = TextQuestsEnv(data_dir / "trinity", verified=True)
+    observations = play(env, actions_for("trinity", 255, ["s", "no"]))
+    assert observations[-2].endswith(
+        "Are you sure you want to go that way?\n\n[Please type YES or NO.] >"
+    )
+    assert "64]" not in observations[-1] and "[RIDX" not in observations[-1]
+    assert '"Smart move," sniggers a voice in your ear.' in observations[-1]
+
+
 def test_unknown_game_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unknown game"):
         TextQuestsEnv(tmp_path / "notagame")
