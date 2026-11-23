@@ -46,3 +46,19 @@ Understand before acting. Read the code, map the dependencies, and understand wh
 ## Managed Files
 
 This repo uses a managed file convention. See [MANAGED_FILES.md](MANAGED_FILES.md) for details on which files are managed (updated from the template) vs. user-owned.
+
+## Before the real PR (remove this section when done)
+
+Art asked on 2026-11-23 to be reminded of this when the branch is close to being sent for
+review. Raise it unprompted as soon as that work starts.
+
+Split the `textquests` branch into two stacked PRs:
+
+1. The port only: `textquests`, `textquests_walkthrough`, file-command blocking, the
+   `context_limit`/`parse_failure` metrics, the corrected moonmist and seastalker
+   walkthroughs, and the upstream fidelity test. No `verified` switch anywhere.
+2. Stacked on it: `textquests_verified` and everything behind `verified=True` (checkpoint
+   data, audit cases, package scans, environment corrections).
+
+After the split, the fidelity test must still pass, and replaying the logged actions of the
+reported base runs through the split base must give identical observations.
