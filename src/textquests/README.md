@@ -215,7 +215,7 @@ tell play from recall of these games' published solutions.
 - **Progress is matched on the cleaned observation**, the text the model sees. Upstream's
   live loop matches the raw interpreter output, where an annotation marker can sit inside a
   checkpoint string and hide it; its reported metric is recomputed offline from the cleaned
-text. The raw text also carries the markers' own fields, which can contain a checkpoint
+  text. The raw text also carries the markers' own fields, which can contain a checkpoint
   string. On the walkthroughs this changes suspect's 35% checkpoint and borderzone's 100%.
 - **Progress within one observation is the max** matching checkpoint. Upstream's live loop
   took the last match in file order; its offline metric (the reported one) takes the max.
