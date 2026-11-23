@@ -260,7 +260,6 @@ class TextQuestsEnv:
         self.state.steps += 1
 
         observation, found_game_over = self._parse_game_over(observation)
-        self.game_progress = max(self.game_progress, self._match_progress(observation))
         self.state.game_over = found_game_over
 
         if self.game_name not in CUSTOM_REWARD_GAMES:
@@ -276,6 +275,9 @@ class TextQuestsEnv:
 
         observation = self._remove_status_line(observation)
         observation, markers = self._find_markers(observation)
+        # On the cleaned text, as upstream's reported (offline) metric: an annotation marker
+        # in the middle of a checkpoint string would otherwise hide it
+        self.game_progress = max(self.game_progress, self._match_progress(observation))
         markers = self._apply_keywords(markers)
         markers = _verbs_go_last(markers)
         label_vectors = [list(self.annotations[m[0]].label_vector) for m in markers]

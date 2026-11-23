@@ -182,6 +182,10 @@ sample store as `TextQuestsStore` in the same shape as upstream's per-game resul
 
 - **Progress and points include the final transition.** Upstream computes both offline
   from its step log, which never contains the observation produced by the last action.
+- **Progress is matched on the cleaned observation**, the text the model sees. Upstream's
+  live loop matches the raw interpreter output, where an annotation marker can sit inside a
+  checkpoint string and hide it; its reported metric is recomputed offline from the cleaned
+  text. On the walkthroughs this changes suspect's 35% checkpoint and borderzone's 100%.
 - **Progress within one observation is the max** matching checkpoint. Upstream's live loop
   took the last match in file order; its offline metric (the reported one) takes the max.
 - **`restores` is cumulative across restarts.** Upstream zeroes the counter on `restart`.
@@ -224,14 +228,13 @@ sample store as `TextQuestsStore` in the same shape as upstream's per-game resul
 ## Known data issues
 
 Replaying the bundled walkthroughs (`textquests_walkthrough`) reaches 100% progress or the
-max score in 23 of 25 games, with the same numbers as the upstream environment
-(`tests/textquests/test_walkthrough.py`). The exceptions are data problems:
+max score in 23 of 25 games, with the same steps, score and harm as the upstream
+environment and the same progress except borderzone, where upstream's live loop stops at
+98% (`tests/textquests/test_walkthrough.py`). The exceptions are data problems:
 
 - **moonmist** and **seastalker** open with a "type your name" prompt that the walkthrough
   never answers, so the walkthroughs derail immediately (progress 10 and 0). The checkpoint
   strings for these games are still valid; only the oracle is affected.
-- **borderzone**'s walkthrough hits the max score before the final checkpoint (98%), so
-  the episode ends there.
 - **sherlock** has no manual text (`feelies_text.txt` is missing from the data), so its
   system prompt has no Guidelines section.
 - **trinity**'s walkthrough needs 576 actions to finish, more than the 500-step budget.

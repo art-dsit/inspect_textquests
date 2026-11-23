@@ -15,7 +15,7 @@ from textquests.game_info import GAMES, MAX_SCORES
 # game: (steps until finished, progress, max score, harm)
 EXPECTED = {
     "ballyhoo": (363, 100, 200, 46),
-    "borderzone": (159, 98, 40, 19),  # stops on max score before the last checkpoint
+    "borderzone": (159, 100, 40, 19),  # 98 in the upstream live loop: see README
     "cutthroats": (229, 100, 180, 8),
     "deadline": (144, 100, 17, 0),
     "enchanter": (226, 100, 400, 8),
@@ -61,3 +61,12 @@ def test_walkthrough_matches_upstream(data_dir: Path, game: str) -> None:
     assert (steps, result.progress, max_score, harm) == EXPECTED[game]
     if game not in BROKEN_WALKTHROUGHS:
         assert result.progress == 100 or max_score == MAX_SCORES[game]
+
+
+@pytest.mark.dataset_download
+def test_checkpoint_text_split_by_a_marker_still_counts(data_dir: Path) -> None:
+    # Suspect prints an annotation marker inside its 35% checkpoint string
+    env = TextQuestsEnv(data_dir / "suspect")
+    env.reset()
+    seen = {env.step(action).progress for action in load_walkthrough("suspect")}
+    assert 35 in seen
