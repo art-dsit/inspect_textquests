@@ -42,7 +42,9 @@ PACKAGE_SCANS = {
     "plunderedhearts": ["fifty-guineas1.jpeg"],  # the pose that opens the portrait
 }
 
-# Actions that can hang or break the interpreter; matched case-insensitively, answered "Impossible."
+# Upstream's blacklist: actions that can hang or break the interpreter, answered
+# "Impossible.". Matched case-insensitively against the whole action, as upstream does, except
+# in verified mode, where each command of a chained action is checked
 COMMON_BAD_ACTIONS = [
     "^brief.*",
     "^super.*",
@@ -60,10 +62,6 @@ EXTRA_BAD_ACTIONS = {
         "^suspend.*",
         "^pause.*",
     ],
-    # Not upstream: these two have a built-in hint menu that takes over the input and, with
-    # the bare "q" blocked, cannot be left
-    "borderzone": ["^(?:hints?|help|clues?)$"],
-    "sherlock": ["^(?:hints?|help|clues?)$"],
     "spellbreaker": [
         "^turn off zipper",
         "^turn on zipper",
@@ -71,11 +69,26 @@ EXTRA_BAD_ACTIONS = {
         "^ride .*?zipper",
     ],
 }
-# Not upstream: commands that make the interpreter write or read a file in the cwd.
-# Frotz's own save/restore use <game>.qzl, an uncounted rewind that survives across runs;
-# "restore N" is handled by the env before the blacklist is consulted. "#record" and
+UPSTREAM_BAD_ACTIONS = {
+    game: EXTRA_BAD_ACTIONS.get(game, []) + COMMON_BAD_ACTIONS for game in GAMES
+}
+# Verified only: these two have a built-in hint menu that takes over the input and, with the
+# bare "q" blocked, cannot be left
+HINT_MENU_ACTIONS = {
+    "borderzone": ["^(?:hints?|help|clues?)$"],
+    "sherlock": ["^(?:hints?|help|clues?)$"],
+}
+# Not upstream, and blocked in every command of an action in both modes: commands that make
+# the interpreter write or read a file in the cwd. Frotz's own save/restore use <game>.qzl, an
+# uncounted rewind that survives across runs; "restore N" is handled by the env before the
+# blacklist is consulted. SCRIPT writes a transcript named after the input line. "#record" and
 # "#command" are debugging verbs left in many of the games ("#random" reseeds the game).
-FILE_ACTIONS = [r"^(?:go\s+)?save\b", r"^(?:go\s+)?restore\b", r"^#"]
+FILE_ACTIONS = [
+    r"^(?:go\s+)?save\b",
+    r"^(?:go\s+)?restore\b",
+    r"^(?:un)?script",
+    r"^#",
+]
 # Per-game verb synonyms of SAVE and RESTORE, from each game's syntax file
 EXTRA_FILE_ACTIONS = {
     "moonmist": [r"^resume\b"],
@@ -83,11 +96,15 @@ EXTRA_FILE_ACTIONS = {
     "stationfall": [r"^rescue\b"],
     "witness": [r"^suspend\b", r"^pause\b", r"^continue\b", r"^resume\b"],
 }
+FILE_COMMANDS = {
+    game: FILE_ACTIONS + EXTRA_FILE_ACTIONS.get(game, []) for game in GAMES
+}
+# Everything the verified environment checks in each command of an action
 BAD_ACTIONS = {
     game: EXTRA_BAD_ACTIONS.get(game, [])
+    + HINT_MENU_ACTIONS.get(game, [])
     + COMMON_BAD_ACTIONS
-    + FILE_ACTIONS
-    + EXTRA_FILE_ACTIONS.get(game, [])
+    + FILE_COMMANDS[game]
     for game in GAMES
 }
 

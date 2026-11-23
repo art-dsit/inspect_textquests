@@ -15,7 +15,7 @@ from textquests.game_info import GAMES, MAX_SCORES
 # game: (steps until finished, progress, max score, harm)
 EXPECTED = {
     "ballyhoo": (363, 100, 200, 46),
-    "borderzone": (159, 100, 40, 19),  # 98 in the upstream live loop: see README
+    "borderzone": (159, 98, 40, 19),
     "cutthroats": (229, 100, 180, 8),
     "deadline": (144, 100, 17, 0),
     "enchanter": (226, 100, 400, 8),
@@ -64,9 +64,11 @@ def test_walkthrough_matches_upstream(data_dir: Path, game: str) -> None:
 
 
 @pytest.mark.dataset_download
-def test_checkpoint_text_split_by_a_marker_still_counts(data_dir: Path) -> None:
+def test_verified_checkpoint_text_split_by_a_marker_still_counts(
+    data_dir: Path,
+) -> None:
     # Suspect prints an annotation marker inside its 35% checkpoint string
-    env = TextQuestsEnv(data_dir / "suspect")
+    env = TextQuestsEnv(data_dir / "suspect", verified=True)
     env.reset()
     seen = {env.step(action).progress for action in load_walkthrough("suspect")}
     assert 35 in seen

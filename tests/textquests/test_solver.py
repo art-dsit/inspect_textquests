@@ -143,7 +143,8 @@ def test_episode_with_restore_and_restart() -> None:
     assert store.steps == len(actions)
     assert store.ended == "max_steps"
     assert store.progress == 5 and store.max_score == 10
-    assert store.restores == 1 and store.restarts == 1
+    # Upstream zeroes the restore count on restart
+    assert store.restores == 0 and store.restarts == 1
     assert score_value(sample) == {
         "progress": 5,
         "verified_progress": 100 * 1 / 13,
@@ -154,7 +155,7 @@ def test_episode_with_restore_and_restart() -> None:
         "context_limit": 0.0,
         "parse_failure": 0.0,
         "steps": 8,
-        "restores": 1,
+        "restores": 0,
     }
 
     observations = [entry.observation for entry in store.log]

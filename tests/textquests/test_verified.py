@@ -106,36 +106,43 @@ def test_audit_cases(data_dir: Path, game: str, verified: bool) -> None:
         assert seen == expect, case["name"]
 
 
+FILE_COMMANDS = [
+    ("planetfall", "#record"),
+    ("planetfall", "look. #command"),
+    ("zork1", "go save"),
+    ("zork1", "look then script"),
+    ("witness", "suspend"),
+    ("witness", "continue"),
+    ("stationfall", "rescue"),
+]
+# Blocked in verified mode only; upstream lets them through
+MODE_COMMANDS = [
+    ("planetfall", "WAIT. SUPERBRIEF"),
+    ("zork1", "look then superbrief"),
+    ("zork1", "quit."),
+    ("zork1", "q "),
+    ("sherlock", "hint"),
+    ("borderzone", "hints"),
+]
+
+
 @pytest.mark.dataset_download
-@pytest.mark.parametrize(
-    ("game", "action"),
-    [
-        ("planetfall", "#record"),
-        ("planetfall", "look. #command"),
-        ("planetfall", "WAIT. SUPERBRIEF"),
-        ("zork1", "look then superbrief"),
-        ("zork1", "quit."),
-        ("zork1", "q "),
-        ("zork1", "go save"),
-        ("witness", "suspend"),
-        ("witness", "continue"),
-        ("stationfall", "rescue"),
-        ("sherlock", "hint"),
-        ("borderzone", "hints"),
-    ],
-)
+@pytest.mark.parametrize("verified", [False, True], ids=["default", "verified"])
+@pytest.mark.parametrize(("game", "action"), FILE_COMMANDS + MODE_COMMANDS)
 def test_file_and_mode_commands_are_blocked(
     data_dir: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     game: str,
     action: str,
+    verified: bool,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    env = TextQuestsEnv(data_dir / game)
+    env = TextQuestsEnv(data_dir / game, verified=verified)
     env.reset()
     env.step("look")
-    assert env.step(action).observation == "Impossible."
+    blocked = env.step(action).observation == "Impossible."
+    assert blocked == (verified or (game, action) in FILE_COMMANDS)
     assert list(tmp_path.iterdir()) == []
 
 

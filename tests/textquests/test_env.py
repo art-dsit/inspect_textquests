@@ -74,7 +74,7 @@ class TestZork1:
         restarted = env.step("please restart the game")
         assert restarted.observation.startswith("ZORK I")
         assert restarted.score == 0 and env.game_progress == 0
-        assert (env.total_restarts, env.total_restores) == (1, 1)
+        assert (env.total_restarts, env.total_restores) == (1, 0), "as upstream"
         assert len(env.checkpoints) == len(ZORK1_DEATH), "restart keeps the checkpoints"
 
     def test_action_filters(self, env: TextQuestsEnv) -> None:
@@ -101,24 +101,59 @@ class TestZork1:
         assert list(tmp_path.iterdir()) == []
         assert env.step("restore 4").observation.startswith("Kitchen")
 
-    def test_chained_file_and_quit_commands_blocked(
+    def test_chained_file_commands_blocked(
         self, env: TextQuestsEnv, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        for action in ["look. save", "look then script", "look.restore", "wait. quit"]:
+        for action in [
+            "look. save",
+            "look then script",
+            "look.restore",
+            "look. #record",
+        ]:
             assert env.step(action).observation == "Impossible."
         assert list(tmp_path.iterdir()) == []
         assert env.step("look. inventory").observation != "Impossible."
+        # Upstream matches the rest of the blacklist against the whole action only
+        assert env.step("wait. quit").observation != "Impossible."
 
-    def test_overlong_action_is_not_matched_against_checkpoints(
+    def test_overlong_action_is_matched_against_checkpoints(
         self, env: TextQuestsEnv
     ) -> None:
+        # As upstream: the warning quoting the action is part of the parsed text
         checkpoints = env.progress_checkpoints
         checkpoint = max(checkpoints, key=lambda text: checkpoints[text])
         action = "look " + "x" * MAX_ACTION_LENGTH + " " + checkpoint
         result = env.step(action)
-        assert checkpoint in result.observation.lower()
-        assert result.progress == 0 and env.game_progress == 0
+        assert result.progress == checkpoints[checkpoint] == env.game_progress
+
+
+@pytest.mark.dataset_download
+def test_verified_chained_quit_blocked(data_dir: Path) -> None:
+    env = TextQuestsEnv(data_dir / "zork1", verified=True)
+    assert env.step("wait. quit").observation == "Impossible."
+
+
+@pytest.mark.dataset_download
+def test_verified_overlong_action_is_not_matched_against_checkpoints(
+    data_dir: Path,
+) -> None:
+    env = TextQuestsEnv(data_dir / "zork1", verified=True)
+    checkpoints = env.progress_checkpoints
+    checkpoint = max(checkpoints, key=lambda text: checkpoints[text])
+    action = "look " + "x" * MAX_ACTION_LENGTH + " " + checkpoint
+    result = env.step(action)
+    assert checkpoint in result.observation.lower()
+    assert result.progress == 0 and env.game_progress == 0
+
+
+@pytest.mark.dataset_download
+def test_verified_restores_counted_across_restarts(data_dir: Path) -> None:
+    env = TextQuestsEnv(data_dir / "zork1", verified=True)
+    env.save_checkpoint("", env.reset())
+    env.step("restore 0")
+    env.step("restart")
+    assert (env.total_restarts, env.total_restores) == (1, 1)
 
 
 @pytest.mark.dataset_download

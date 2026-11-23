@@ -1,8 +1,10 @@
 """Jericho-backed game environment with Jiminy Cricket annotations.
 
-Port of https://github.com/centerforaisafety/textquests/blob/main/src/textquests_env.py
-(MIT, itself adapted from hendrycks/jiminy-cricket annotated_env.py). Behaviour is kept
-identical except where a comment says otherwise; see README "Deviations from upstream".
+Port of https://github.com/centerforaisafety/simple-evals/blob/main/textquests/src/textquests_env.py
+(MIT, itself adapted from hendrycks/jiminy-cricket annotated_env.py). By default it behaves
+as upstream's, step for step, except where a comment says otherwise (see README "Deviations
+from upstream"); tests/textquests/test_upstream_fidelity.py replays games through both.
+``verified=True`` turns on the corrections of TextQuests Verified.
 
 The recompiled game files print inline markers that this class strips and interprets:
 ``[ID: file:line, PRSO: x, PRSI: y]`` / ``[ID: file:line]`` fire an annotation (moral
@@ -26,9 +28,11 @@ from jericho.jericho import UnsupportedGameWarning
 
 from textquests.game_info import (
     BAD_ACTIONS,
+    FILE_COMMANDS,
     MAX_SCORES,
     PACKAGE_SCANS,
     UNMARKED_ENDINGS,
+    UPSTREAM_BAD_ACTIONS,
 )
 from textquests.verified import verified_strings
 
@@ -189,7 +193,9 @@ class TextQuestsEnv:
                 exactly when actions are refused, detect the endings that print no
                 [EVENT: GAME OVER] marker, read the score on the final turn, strip every
                 status-line redraw, rejoin compressed text split across reads, and restart
-                only on a RESTART command.
+                only on a RESTART command. Also match progress on the text the model is
+                shown, check every command of a chained action against the blacklist,
+                block the hint menus, and keep counting restores across restarts.
         """
         self.game_folder = Path(game_folder)
         self.verified = verified
@@ -205,6 +211,10 @@ class TextQuestsEnv:
         self.progress_checkpoints: dict[str, int] = {
             c["observation_string_check"].lower(): int(c["percentage"])
             for c in checkpoints
+        }
+        # Keyed as upstream keys them: a case-only duplicate would be a separate entry
+        self._upstream_checkpoints: dict[str, int] = {
+            c["observation_string_check"]: int(c["percentage"]) for c in checkpoints
         }
         self.package_scans = [
             self.game_folder / "feelies" / "scans" / name
@@ -265,14 +275,19 @@ class TextQuestsEnv:
         observation, _ = self.frotz.reset()
         observation = self._replace_text(observation)
         observation = self._remove_status_line(observation)
-        # Strip any markers in the opening text without counting them
-        observation = MARKER_WITH_OBJECTS_RE.sub("", observation)
-        observation = MARKER_RE.sub("", observation)
+        score = 0
+        if self.verified:
+            # Strip any markers in the opening text without counting them
+            observation = MARKER_WITH_OBJECTS_RE.sub("", observation)
+            observation = MARKER_RE.sub("", observation)
+        else:
+            self.total_restores = 0
+            score = self.frotz.get_score()
 
         self.state = _State()
         self.game_progress = 0
         return StepResult(
-            observation=observation, reward=0, done=False, score=0, progress=0
+            observation=observation, reward=0, done=False, score=score, progress=0
         )
 
     def step(self, action: str) -> StepResult:
@@ -287,12 +302,14 @@ class TextQuestsEnv:
                     reward=0,
                     done=self.state.game_over,
                     score=self.state.current_score,
-                    progress=self.game_progress,
+                    progress=self._reported_progress(),
                 )
             return restored
         if self._is_restart(action_str):
             self.total_restarts += 1
-            return self.reset()
+            result = self.reset()
+            result.score = self.state.current_score
+            return result
 
         if self.state.game_over:
             return StepResult(
@@ -300,7 +317,7 @@ class TextQuestsEnv:
                 reward=0,
                 done=True,
                 score=self.state.current_score,
-                progress=self.game_progress,
+                progress=self._reported_progress(),
             )
 
         warning = None
@@ -314,12 +331,17 @@ class TextQuestsEnv:
             observation, ended = self._unmarked_ending(observation)
         observation, parsed_reward = self._parse_rewards(observation)
         self.state.steps += 1
+        if warning and not self.verified:
+            # As upstream: the warning is parsed with the game's text, so it can match a
+            # checkpoint or a marker, and it keeps a leading ">" line from being stripped
+            observation = warning + "\n" + observation
 
         observation, found_game_over = self._parse_game_over(observation)
         if self.verified:
             found_game_over = found_game_over or ended
             done = found_game_over
         self.state.game_over = found_game_over
+        raw = observation
 
         if self.game_name not in CUSTOM_REWARD_GAMES:
             parsed_reward = 0
@@ -334,20 +356,34 @@ class TextQuestsEnv:
 
         observation = self._remove_status_line(observation)
         observation, markers = self._find_markers(observation)
-        # On the cleaned text, as upstream's reported (offline) metric: an annotation marker
-        # in the middle of a checkpoint string would otherwise hide it
-        matched = self._matched_checkpoints(observation)
+        if self.verified:
+            # On the cleaned text: an annotation marker in the middle of a checkpoint
+            # string would otherwise hide it
+            matched = self._matched_checkpoints(observation)
+            progress = max(matched, default=0)
+            shown = observation
+        else:
+            # Upstream's live match, on the text before the status line and markers are
+            # removed; within one observation the last match in file order counts
+            hits = [
+                pct
+                for text, pct in self._upstream_checkpoints.items()
+                if text.lower() in raw.lower()
+            ]
+            matched = set(hits)
+            progress = hits[-1] if hits else 0
+            shown = observation.removeprefix(f"{warning}\n") if warning else observation
         self.checkpoints_reached |= matched
-        lowered = observation.lower()
+        lowered = shown.lower()
         self.verified_reached |= {
             pct for text, pct in self.verified_checkpoints.items() if text in lowered
         }
-        self.game_progress = max(self.game_progress, max(matched, default=0))
+        self.game_progress = max(self.game_progress, progress)
         markers = self._apply_keywords(markers)
         markers = _verbs_go_last(markers)
         label_vectors = [list(self.annotations[m[0]].label_vector) for m in markers]
 
-        if warning:
+        if warning and self.verified:
             # Added last: the warning quotes the model's own text, which must not be
             # matched against checkpoints, markers or the game-over text
             observation = warning + "\n" + observation
@@ -392,7 +428,7 @@ class TextQuestsEnv:
 
     def _pre_step(self, action: str) -> tuple[str, bool]:
         """Step the interpreter unless the action is blacklisted; expand compressed text."""
-        if _blocked(self.game_name, action):
+        if _blocked(self.game_name, action, self.verified):
             observation, done = "Impossible.", False
         else:
             observation, _, done, _ = self.frotz.step(action)
@@ -420,6 +456,10 @@ class TextQuestsEnv:
             self.held_word = held.group(0)
             observation += self.held_word
         return observation
+
+    def _reported_progress(self) -> int:
+        """Progress on the results that upstream returns without a game_progress entry."""
+        return self.game_progress if self.verified else 0
 
     def _is_restart(self, action: str) -> bool:
         if not self.verified:
@@ -594,14 +634,21 @@ def game_finished(progress: int, score: int, max_score: int) -> bool:
     return progress == PROGRESS_COMPLETE or score == max_score
 
 
-def _blocked(game: str, action: str) -> bool:
-    """Whether any command in the action is on the game's blacklist.
+def _blocked(game: str, action: str, verified: bool) -> bool:
+    """Whether the action is on the game's blacklist.
 
-    The parser runs several commands from one line ("look. save", "look then quit"), so each
-    is checked on its own.
+    The parser runs several commands from one line ("look. save", "look then quit"). File
+    commands are checked in each of them; in verified mode, so is the rest of the
+    blacklist, which upstream matches against the whole action.
     """
-    commands = (c.strip() for c in COMMAND_SEPARATOR_RE.split(action.lower()))
-    return any(re.search(bad, c) for c in commands for bad in BAD_ACTIONS[game])
+    lowered = action.lower()
+    commands = [c.strip() for c in COMMAND_SEPARATOR_RE.split(lowered)]
+    patterns = BAD_ACTIONS[game] if verified else FILE_COMMANDS[game]
+    if any(re.search(bad, c) for c in commands for bad in patterns):
+        return True
+    return not verified and any(
+        re.search(bad, lowered) for bad in UPSTREAM_BAD_ACTIONS[game]
+    )
 
 
 def _verbs_go_last(markers: list[Marker]) -> list[Marker]:
