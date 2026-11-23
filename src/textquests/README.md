@@ -190,23 +190,41 @@ found errors in 74 of them. 116 are wrong:
 - seven can be scored on the first move by typing the checkpoint's own words, which the
   parser quotes back ("You can't see any bolt cutter here").
 
-The Verified task changes three things and nothing else (same games, prompts, environment
-and 500-step budget, with the `json` output format):
+The Verified task changes these things and nothing else (same games, prompts and 500-step
+budget, with the `json` output format):
 
 - 107 checkpoints use replacement text, 9 that no text can decide are left out, and so are
   the eight 0% "game has started" ones. That leaves 310. The list is in `verified.py`.
 - `verified_progress` is the share of a game's verified checkpoints reached, in any order.
   These games are not linear, and the highest checkpoint says little about how much was done.
-- A game ends when its verified 100% checkpoint is reached, or at the maximum score.
+- A game ends when the game itself ends after its verified 100% checkpoint, or at the
+  maximum score. Several games award their last points on the final turn, after the 100%
+  text: trinity's last 5 come at the end of its epilogue.
 - Five games cannot be finished without an item from the original package that the manual
   text leaves out: a map with coordinates (cutthroats, infidel), a radio frequency
   (ballyhoo), a password (lurkinghorror), a pose on a banknote (plunderedhearts). The data
   has these as scans, and the model is shown them as images with its first turn, so the task
   needs a model that accepts images.
+- Environment faults shared with upstream are fixed:
+  - The game-over prompt (restore or restart) comes with the turn on which the game ends,
+    and not after a death the game recovers from (zork1–3, enchanter, spellbreaker,
+    starcross).
+  - Endings that upstream does not detect end the game: deadline's 8 pm time limit and its
+    deaths, witness's 8:00 a.m. time limit and deaths in the shot, zork3's fourth death,
+    borderzone's failed chapters, and any crash of the interpreter. Without this the game
+    plays on after its ending or repeats its ending prompt. `restore N` works after a crash.
+  - Points awarded on the turn the game ends are counted. With them every fixed walkthrough
+    reaches the maximum score.
+  - Status-line redraws during multi-turn waits are removed, and the game text printed
+    after them on the same line is kept (seastalker lost some).
+  - trinity's yes/no prompt reaches the model whole, not as `[RIDX:` and ` 64]`.
+  - Only the `restart` command restarts the game, not any action containing the word.
 
 `tests/textquests/verified_cases.json` holds 1,034 replay cases behind the replacements, and
 the tests check that each game's walkthrough reaches every verified checkpoint and that no
-verified text can be scored by typing it. `textquests` reports `verified_progress` as well.
+verified text can be scored by typing it, and that the walkthroughs in the corrected
+environment reach every verified checkpoint and the maximum score. `textquests` reports
+`verified_progress` as well.
 
 Verified numbers are not comparable with the paper or the leaderboard. Limits that remain:
 
@@ -225,7 +243,8 @@ Verified numbers are not comparable with the paper or the leaderboard. Limits th
    under `output_format=json`. Replies without an action are retried against the same
    history up to `max_retries` times, then the game is abandoned.
 3. Before every action the state is checkpointed, so `restore N` rewinds to the state the
-   game was in when step `N` was shown. Any action containing `restart` restarts the game.
+   game was in when step `N` was shown. Any action containing `restart` restarts the game
+   (in `textquests_verified`, only the `restart` command).
    After a death the observation carries an extra prompt reminding the model of both.
 4. The episode ends at 100% progress, at the max score, or after `max_steps` actions. It
    also ends, scored on what it reached, when the history no longer fits the model's
@@ -306,7 +325,15 @@ flawed for these non-linear games.
 
 ## Known environment issues
 
-These are shared with upstream and not fixed here:
+These are shared with upstream. `textquests` keeps them, so that its numbers stay comparable;
+`textquests_verified` fixes them (see above) except:
+
+- **borderzone's status display stays in the observation**: clock times, searchlight
+  bearings and the guard diagram.
+- **A zork3 death in another age is not detected as final.** The game prints only the cause
+  of death before ending, so there is no fixed text to recognise, and play carries on.
+
+In `textquests`:
 
 - **A death the game recovers from is reported as game over** (zork1–3, enchanter,
   spellbreaker, starcross): the next prompt tells the model to restore or restart while the
