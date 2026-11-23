@@ -10,6 +10,7 @@ import pytest
 from textquests.data import load_walkthrough
 from textquests.env import MAX_ACTION_LENGTH, TextQuestsEnv
 from textquests.game_info import GAMES, PACKAGE_SCANS
+from textquests.solver import _finished
 from textquests.verified import DROPPED, REPLACEMENTS
 
 CASES: list[dict[str, Any]] = json.loads(
@@ -67,15 +68,29 @@ def test_typing_a_checkpoint_string_does_not_score_it(
             assert string not in env.step(action).observation.lower(), action
 
 
+# Cases whose outcome the verified environment changes, and why
+VERIFIED_MODE_CHANGES = {
+    # The game ends at the jump and at 8 pm, so the later action is refused
+    "trap-jump-death-not-game-over": "deadline's jump ends the game",
+    "trap-8pm-deadline-not-game-over": "deadline's 8 pm time limit ends the game",
+    # Tip's line printed after status-line redraws on the same line is kept
+    "70-residual-env-strips-report-during-wait": "seastalker's event text is kept",
+    # The text the game prints after the player's death is cut
+    "30-fires-although-player-shot-dead": "witness's death in the shot ends the game",
+}
+
+
 @pytest.mark.dataset_download
+@pytest.mark.parametrize("verified", [False, True], ids=["default", "verified"])
 @pytest.mark.parametrize("game", GAMES)
-def test_audit_cases(data_dir: Path, game: str) -> None:
+def test_audit_cases(data_dir: Path, game: str, verified: bool) -> None:
     """Replay cases from the audit: where each original and replacement string does and does not occur."""
     cases = [case for case in CASES if case["game"] == game]
     assert cases
+    assert set(VERIFIED_MODE_CHANGES) <= {case["name"] for case in CASES}
     walkthrough = load_walkthrough(game)
     for case in cases:
-        env = TextQuestsEnv(data_dir / game)
+        env = TextQuestsEnv(data_dir / game, verified=verified)
         env.reset()
         setup = case["setup"]
         prefix = setup.get("actions", walkthrough[: setup.get("walkthrough_upto", 0)])
@@ -85,7 +100,10 @@ def test_audit_cases(data_dir: Path, game: str) -> None:
         for action in case["actions"]:
             observation = env.step(action).observation.lower()
             seen = seen or any(s.lower() in observation for s in case["strings"])
-        assert seen == case["expect"], case["name"]
+        expect = case["expect"]
+        if verified and case["name"] in VERIFIED_MODE_CHANGES:
+            expect = not expect
+        assert seen == expect, case["name"]
 
 
 @pytest.mark.dataset_download
@@ -126,3 +144,27 @@ def test_package_scans_exist_in_the_data(data_dir: Path) -> None:
     for game in PACKAGE_SCANS:
         scans = TextQuestsEnv(data_dir / game).package_scans
         assert scans and all(scan.is_file() for scan in scans), game
+
+
+STATUS_LINE_RE = re.compile(r"Time: +\d{1,2}:\d\d|Score: +-?\d+ +Moves: +\d+")
+
+
+@pytest.mark.dataset_download
+@pytest.mark.parametrize("game", GAMES)
+def test_verified_oracle_finishes_with_every_checkpoint_and_full_points(
+    data_dir: Path, game: str
+) -> None:
+    # As walkthrough_solver(verified=True) plays it
+    env = TextQuestsEnv(data_dir / game, verified=True)
+    result = env.reset()
+    best_score = 0
+    for action in load_walkthrough(game, fixed=True):
+        if _finished(env, result, verified=True):
+            break
+        env.save_checkpoint(result.observation, result)
+        result = env.step(action)
+        best_score = max(best_score, result.score)
+        assert not STATUS_LINE_RE.search(result.observation), action
+    assert env.verified_reached == set(env.verified_checkpoints.values())
+    assert best_score == env.max_score
+    assert env.state.game_over, "the walkthrough's last action ends the game"
