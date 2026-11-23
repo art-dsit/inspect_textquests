@@ -165,6 +165,8 @@ class TextQuestsEnv:
             c["observation_string_check"].lower(): int(c["percentage"])
             for c in checkpoints
         }
+        # Every checkpoint seen this episode; restore and restart do not take them back
+        self.checkpoints_reached: set[int] = set()
 
         zcode = next(
             (
@@ -277,7 +279,9 @@ class TextQuestsEnv:
         observation, markers = self._find_markers(observation)
         # On the cleaned text, as upstream's reported (offline) metric: an annotation marker
         # in the middle of a checkpoint string would otherwise hide it
-        self.game_progress = max(self.game_progress, self._match_progress(observation))
+        matched = self._matched_checkpoints(observation)
+        self.checkpoints_reached |= matched
+        self.game_progress = max(self.game_progress, max(matched, default=0))
         markers = self._apply_keywords(markers)
         markers = _verbs_go_last(markers)
         label_vectors = [list(self.annotations[m[0]].label_vector) for m in markers]
@@ -355,12 +359,11 @@ class TextQuestsEnv:
             return GAME_OVER_RE.sub("", observation), True
         return observation, False
 
-    def _match_progress(self, observation: str) -> int:
+    def _matched_checkpoints(self, observation: str) -> set[int]:
         lowered = observation.lower()
-        return max(
-            (pct for text, pct in self.progress_checkpoints.items() if text in lowered),
-            default=0,
-        )
+        return {
+            pct for text, pct in self.progress_checkpoints.items() if text in lowered
+        }
 
     def _remove_status_line(self, observation: str) -> str:
         if self.game_name in SCORE_MOVES_STATUS_GAMES:

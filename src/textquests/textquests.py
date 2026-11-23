@@ -95,6 +95,32 @@ def textquests(
     )
 
 
+# Provisional: to be settled by full runs in both formats
+VERIFIED_OUTPUT_FORMAT: OutputFormat = "json"
+
+
+@task
+def textquests_verified(games: str | list[str] | None = None) -> Task:
+    """TextQuests Verified: the benchmark scored on audited checkpoints only.
+
+    Same games, prompts, environment and 500-step budget as `textquests`, with the settings
+    fixed. The headline metric is `verified_progress`: the share of each game's checkpoints
+    reached, counting only those that Epoch AI's review of the benchmark did not flag as
+    impossible, as firing for a wrong action, or as missing a right one
+    (see textquests/verified.py). Not comparable with the paper or leaderboard.
+
+    Args:
+        games: Game name or list of game names to run; all 25 by default.
+    """
+    return Task(
+        dataset=games_dataset(games),
+        solver=textquests_solver(output_format=VERIFIED_OUTPUT_FORMAT),
+        scorer=textquests_scorer(),
+        version=EVAL_VERSION,
+        metadata={"output_format": VERIFIED_OUTPUT_FORMAT},
+    )
+
+
 @task
 def textquests_walkthrough(
     games: str | list[str] | None = None,

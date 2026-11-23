@@ -22,6 +22,10 @@ class TextQuestsStore(StoreModel):
     progress: int = 0
     max_score: int = 0
     harm: int = 0
+    # Percentages of every checkpoint reached, and how many of the Verified set that is
+    checkpoints: list[int] = Field(default_factory=list)
+    verified_reached: int = 0
+    verified_total: int = 0
     restores: int = 0
     restarts: int = 0
     # "finished", "max_steps", "parse_failure", "context_limit", "walkthrough_exhausted",

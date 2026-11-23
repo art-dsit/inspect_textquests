@@ -42,6 +42,7 @@ Then run evaluations:
 
 ```bash
 uv run inspect eval textquests/textquests --model openai/gpt-5-nano
+uv run inspect eval textquests/textquests_verified --model openai/gpt-5-nano
 uv run inspect eval textquests/textquests_walkthrough --model openai/gpt-5-nano
 ```
 
@@ -49,7 +50,7 @@ You can also import tasks as Python objects:
 
 ```python
 from inspect_ai import eval
-from textquests import textquests, textquests_walkthrough
+from textquests import textquests, textquests_verified, textquests_walkthrough
 eval(textquests)
 ```
 
@@ -102,8 +103,8 @@ You can control a variety of options from the command line. For example:
 
 ```bash
 uv run inspect eval textquests/textquests --limit 10
-uv run inspect eval textquests/textquests_walkthrough --max-connections 10
-uv run inspect eval textquests/textquests --temperature 0.5
+uv run inspect eval textquests/textquests_verified --max-connections 10
+uv run inspect eval textquests/textquests_walkthrough --temperature 0.5
 ```
 
 See `uv run inspect eval --help` for all available options.
@@ -121,6 +122,10 @@ See `uv run inspect eval --help` for all available options.
 - `seed` (int): Z-machine random seed (upstream uses 1). (default: `1`)
 - `canonicalize_history` (bool): Rewrite assistant turns to bare <reasoning>/<action> text in the history, as upstream does. Set False to keep the raw model output. (default: `True`)
 - `output_format` (Literal['xml', 'json']): Reply format the prompts ask for. "xml" is the maintained upstream harness (<reasoning>/<action> tags); "json" is the original harness that produced the paper's results (a {"reasoning", "action"} block). (default: `'xml'`)
+
+### `textquests_verified`
+
+- `games` (str | list[str] | None): Game name or list of game names to run; all 25 by default. (default: `None`)
 
 ### `textquests_walkthrough`
 
@@ -153,6 +158,7 @@ stderr) over games, as upstream reports them:
 | Metric | Meaning |
 | --- | --- |
 | `progress` | Highest checkpoint percentage whose text appeared in any observation (0–100). The leaderboard's Progress. |
+| `verified_progress` | Share of the game's verified checkpoints reached (0–100). The headline metric of `textquests_verified`; see below. |
 | `points` | Highest in-game score reached, as a percentage of the game's max. |
 | `harm` | Sum over the episode of the "bad, others" tier of every moral annotation fired. Lower is better. Scales with episode length. |
 | `finished` | 1 if progress reached 100 or the in-game score reached its maximum. |
@@ -162,6 +168,30 @@ stderr) over games, as upstream reports them:
 
 The per-step log (observation, action, reasoning, score, label vectors) is kept in the
 sample store as `TextQuestsStore` in the same shape as upstream's per-game result JSON.
+
+## TextQuests Verified
+
+[Epoch AI's review](https://epoch.ai/benchmarks/textquests/review) of the benchmark replayed
+every walkthrough and found errors in 74 of the 327 progress checkpoints. It also found that
+taking the highest checkpoint reached misstates progress in these non-linear games.
+`textquests_verified` is one fixed variant that answers both:
+
+```bash
+uv run inspect eval textquests/textquests_verified --model openai/gpt-5-nano
+```
+
+- It scores 269 checkpoints. The 50 that Epoch flagged as impossible to reach in a run, as
+  firing for a wrong action, or as missing a right one are left out, and so are the eight 0%
+  "game has started" checkpoints. The list is in `verified.py`; we did not repeat the audit.
+- `verified_progress` is the share of a game's remaining checkpoints that were reached, in
+  any order, so a milestone reached after a later one still counts.
+- Games, prompts, environment and the 500-step budget are those of `textquests`, with the
+  settings fixed and the `json` output format.
+
+The 23 working walkthroughs reach every verified checkpoint of their game
+(`tests/textquests/test_walkthrough.py`). Its numbers are not comparable with the paper or
+the leaderboard. It does not supply the manuals and maps some games need, and it cannot
+tell play from recall of these games' published solutions.
 
 ## How an episode runs
 
@@ -280,6 +310,11 @@ and the retry against the same history often repeated it. Replaying four of thos
 124 times through each API gave 15 bare `analysis` replies through the Responses API and
 none through Chat Completions. Eight other replies were refused by OpenAI's prompt filter.
 The run has not been repeated with `-M responses_api=false`.
+
+The GPT-4.1 and GPT-5 runs predate two changes to scoring. Rescored from the observations
+in their logs, progress matched on the cleaned text is 22.8 ± 4.6 and 38.0 ± 5.0 (suspect's
+35% checkpoint was being missed in both), and `verified_progress` is 17.0 ± 3.4 and
+26.4 ± 4.1. The rescoring cannot see the observation after each game's last action.
 
 GPT-4.1 and GPT-4.1 mini match the paper within noise. GPT-5 mini scores 5 points higher than the paper's
 500-step number and about the same as its 800-step number (21.1); the paper gives no

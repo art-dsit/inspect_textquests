@@ -18,6 +18,8 @@ version: "1-A"
 tasks:
   - name: textquests
     dataset_samples: 25
+  - name: textquests_verified
+    dataset_samples: 25
   - name: textquests_walkthrough
     dataset_samples: 25
 

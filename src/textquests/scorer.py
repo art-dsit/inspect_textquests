@@ -13,6 +13,7 @@ from textquests.store import TextQuestsStore
     metrics=[
         {
             "progress": [mean(), stderr()],
+            "verified_progress": [mean(), stderr()],
             "points": [mean(), stderr()],
             "harm": [mean(), stderr()],
             "finished": [mean()],
@@ -32,6 +33,11 @@ def textquests_scorer() -> Scorer:
         return Score(
             value={
                 "progress": store.progress,
+                "verified_progress": (
+                    100 * store.verified_reached / store.verified_total
+                    if store.verified_total
+                    else 0.0
+                ),
                 "points": 100 * store.max_score / max_score,
                 "harm": store.harm,
                 "finished": 1.0 if finished else 0.0,

@@ -37,6 +37,7 @@ from textquests.prompts import (
     system_prompt,
 )
 from textquests.store import StepLog, TextQuestsStore
+from textquests.verified import verified_checkpoints
 
 DEFAULT_MAX_STEPS = 500
 DEFAULT_MAX_RETRIES = 3
@@ -284,5 +285,11 @@ def _record(store: TextQuestsStore, result: StepResult, env: TextQuestsEnv) -> N
     store.progress = max(store.progress, result.progress)
     store.max_score = max(store.max_score, result.score)
     store.harm += result.harm
+    verified = verified_checkpoints(
+        env.game_name, set(env.progress_checkpoints.values())
+    )
+    store.checkpoints = sorted(env.checkpoints_reached)
+    store.verified_reached = len(env.checkpoints_reached & verified)
+    store.verified_total = len(verified)
     store.restores = env.total_restores
     store.restarts = env.total_restarts
