@@ -145,10 +145,11 @@ def test_episode_with_restore_and_restart() -> None:
     assert store.restores == 1 and store.restarts == 1
     assert score_value(sample) == {
         "progress": 5,
-        "verified_progress": 100 * 1 / 12,
+        "verified_progress": 100 * 1 / 13,
         "points": 100 * 10 / MAX_SCORES["zork1"],
         "harm": store.harm,
         "finished": 0.0,
+        "verified_finished": 0.0,
         "context_limit": 0.0,
         "parse_failure": 0.0,
         "steps": 8,
@@ -308,6 +309,7 @@ def test_walkthrough_solver() -> None:
         "points": 100.0,
         "harm": 2,
         "finished": 1.0,
+        "verified_finished": 1.0,
         "context_limit": 0.0,
         "parse_failure": 0.0,
         "steps": 82,

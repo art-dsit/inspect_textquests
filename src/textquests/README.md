@@ -171,27 +171,47 @@ sample store as `TextQuestsStore` in the same shape as upstream's per-game resul
 
 ## TextQuests Verified
 
-[Epoch AI's review](https://epoch.ai/benchmarks/textquests/review) of the benchmark replayed
-every walkthrough and found errors in 74 of the 327 progress checkpoints. It also found that
-taking the highest checkpoint reached misstates progress in these non-linear games.
-`textquests_verified` is one fixed variant that answers both:
+`textquests_verified` is one fixed variant of the benchmark with corrected progress scoring:
 
 ```bash
 uv run inspect eval textquests/textquests_verified --model openai/gpt-5-nano
 ```
 
-- It scores 269 checkpoints. The 50 that Epoch flagged as impossible to reach in a run, as
-  firing for a wrong action, or as missing a right one are left out, and so are the eight 0%
-  "game has started" checkpoints. The list is in `verified.py`; we did not repeat the audit.
-- `verified_progress` is the share of a game's remaining checkpoints that were reached, in
-  any order, so a milestone reached after a later one still counts.
-- Games, prompts, environment and the 500-step budget are those of `textquests`, with the
-  settings fixed and the `json` output format.
+Upstream scores progress as the highest checkpoint whose text appeared in the game's output.
+We audited all 327 checkpoints against the games' source code and by replay, following
+[Epoch AI's review](https://epoch.ai/benchmarks/textquests/review) of the benchmark, which
+found errors in 74 of them. 116 are wrong:
 
-The 23 working walkthroughs reach every verified checkpoint of their game
-(`tests/textquests/test_walkthrough.py`). Its numbers are not comparable with the paper or
-the leaderboard. It does not supply the manuals and maps some games need, and it cannot
-tell play from recall of these games' published solutions.
+- the text also prints for a wrong action or a losing ending. The "100%" text of cutthroats,
+  sorcerer, plunderedhearts, planetfall and trinity appears in endings where the player dies
+  or fails, and upstream then stops the game as finished;
+- or a legitimate way of reaching the milestone prints something else: `get all` where the
+  text expects `get jewels`, reading a scroll where the game only requires casting it;
+- seven can be scored on the first move by typing the checkpoint's own words, which the
+  parser quotes back ("You can't see any bolt cutter here").
+
+The Verified task changes three things and nothing else (same games, prompts, environment
+and 500-step budget, with the `json` output format):
+
+- 107 checkpoints use replacement text, 9 that no text can decide are left out, and so are
+  the eight 0% "game has started" ones. That leaves 310. The list is in `verified.py`.
+- `verified_progress` is the share of a game's verified checkpoints reached, in any order.
+  These games are not linear, and the highest checkpoint says little about how much was done.
+- A game ends when its verified 100% checkpoint is reached, or at the maximum score.
+
+`tests/textquests/verified_cases.json` holds 1,034 replay cases behind the replacements, and
+the tests check that each game's walkthrough reaches every verified checkpoint and that no
+verified text can be scored by typing it. `textquests` reports `verified_progress` as well.
+
+Verified numbers are not comparable with the paper or the leaderboard. Limits that remain:
+
+- Six games need something from the original package that the agent is not given: sherlock
+  (tide times), lurkinghorror (a computer password), cutthroats and infidel (map
+  coordinates), ballyhoo (a radio frequency) and plunderedhearts (a pose on a banknote).
+  23 of the 310 checkpoints depend on these.
+- The interpreter seed is fixed, and passwords, codes and character movements are random,
+  so every run plays the one world that the published walkthroughs describe.
+- The score cannot tell play from recall of these games' published solutions.
 
 ## How an episode runs
 
@@ -223,12 +243,16 @@ tell play from recall of these games' published solutions.
 - **A typo in the `-visited` annotation filter is fixed.** Upstream's branch raises
   `NameError`, crashing the episode for the two zork2 annotations that use it; it now fires
   once the referenced location has been visited, as the CSV says.
-- **Frotz's own `save` and bare `restore` are blocked** with "Impossible.", like `script`.
-  Upstream lets them through: `save` writes `<game>.qzl` into the working directory and
-  `restore` reloads it, a rewind that is not counted and that a later run of the same game
-  would pick up too. In the two September runs three of 50 games typed `save`. They are
-  also blocked, with `script`, `unscript` and `quit`, when chained after another command
-  (`look. save`, `look then quit`), which upstream's start-anchored patterns let through.
+- **Commands that read or write files are blocked** with "Impossible.", like `script`:
+  Frotz's own `save` and bare `restore` (which keep `<game>.qzl` in the working directory, a
+  rewind that is not counted and that a later run would pick up), their per-game synonyms
+  (`suspend`, `continue`, `resume`), and the `#record`/`#command` debugging verbs left in
+  many of the games. Upstream lets all of these through. In the two September runs three of
+  50 games typed `save`.
+- **The blacklist is applied to each command in an action.** Upstream's patterns only match
+  the start of the action, so `look. superbrief` or `quit.` get through.
+- **The built-in hint menus of sherlock and borderzone are blocked**: they take over the
+  input and cannot be left.
 - **The over-length warning is not scored.** An action over 64 characters is echoed back
   in a "System Warning" line. Upstream adds that line before matching checkpoints, markers
   and the game-over text, so a model can score a checkpoint by typing its text; here the
@@ -258,21 +282,41 @@ tell play from recall of these games' published solutions.
 
 ## Known data issues
 
-Replaying the bundled walkthroughs (`textquests_walkthrough`) reaches 100% progress or the
-max score in 23 of 25 games, with the same steps, score and harm as the upstream
-environment and the same progress except borderzone, where upstream's live loop stops at
-98% (`tests/textquests/test_walkthrough.py`). The exceptions are data problems:
+Replaying the bundled walkthroughs reaches 100% progress or the max score in 23 of 25 games,
+with the same steps, score and harm as the upstream environment and the same progress except
+borderzone, where upstream's live loop stops at 98% (`tests/textquests/test_walkthrough.py`).
+The exceptions are data problems:
 
 - **moonmist** and **seastalker** open with a "type your name" prompt that the walkthrough
-  never answers, so the walkthroughs derail immediately (progress 10 and 0). The checkpoint
-  strings for these games are still valid; only the oracle is affected.
+  never answers, so the bundled walkthroughs derail immediately (progress 10 and 0).
+  `textquests_walkthrough` plays corrected ones, which finish.
 - **sherlock** has no manual text (`feelies_text.txt` is missing from the data), so its
   system prompt has no Guidelines section.
-- **trinity**'s walkthrough needs 576 actions to finish, more than the 500-step budget.
+- **trinity**'s walkthrough takes 576 actions to finish, more than the 500-step budget. The
+  game can be finished in 465.
+- **Most walkthroughs only work under seed 1**: they hard-code values the game draws at
+  random.
 
 [Epoch AI's review](https://epoch.ai/benchmarks/textquests/review) of the benchmark
 reports errors in 74 of the 327 progress checkpoints and rates the progress metric as
 flawed for these non-linear games.
+
+## Known environment issues
+
+These are shared with upstream and not fixed here:
+
+- **A death the game recovers from is reported as game over** (zork1–3, enchanter,
+  spellbreaker, starcross): the next prompt tells the model to restore or restart while the
+  game is still playable. Some real endings are not detected at all (deadline's time limit,
+  a failed chapter in borderzone), and the game then repeats its ending text.
+- **Points earned on the final turn are missed** in six games, so the oracle's `points` is
+  below 100 there (cutthroats 72, lurkinghorror and trinity 95, ballyhoo 98, sherlock and
+  wishbringer 99).
+- **Status lines stay in the observation** during multi-turn waits in the games with a
+  clock, and in seastalker the status-line pattern can delete event text printed on the
+  same line.
+- **Any action containing the word `restart` restarts the game**, without the game's own
+  confirmation.
 
 ## Evaluation Report
 

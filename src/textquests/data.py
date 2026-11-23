@@ -82,6 +82,21 @@ def game_dir(game: str) -> Path:
     return ensure_data() / game
 
 
-def load_walkthrough(game: str) -> list[str]:
+# Both games open by asking for the player's name, which the bundled walkthroughs never give,
+# so every later action is read as an answer. Moonmist's is written for the GREEN variant.
+WALKTHROUGH_PREFIX = {
+    "moonmist": ["TOUCH EYE", "Ro Bot", "YES", "GREEN", "YES"],
+    "seastalker": ["Ro", "Bot", "yes"],
+}
+# CAREFULLY skips two random rolls in the engine crawl space, one of them fatal
+WALKTHROUGH_REPLACE = {"seastalker": {"fix regulator": "fix regulator carefully"}}
+
+
+def load_walkthrough(game: str, fixed: bool = False) -> list[str]:
+    """The game's bundled walkthrough; with ``fixed``, corrected so that it finishes."""
     text = (game_dir(game) / f"{game}_walkthrough.txt").read_text()
-    return [line for line in text.split("\n") if line.strip()]
+    actions = [line for line in text.split("\n") if line.strip()]
+    if not fixed:
+        return actions
+    replace = WALKTHROUGH_REPLACE.get(game, {})
+    return WALKTHROUGH_PREFIX.get(game, []) + [replace.get(a, a) for a in actions]

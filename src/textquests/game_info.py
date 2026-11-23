@@ -48,6 +48,10 @@ EXTRA_BAD_ACTIONS = {
         "^suspend.*",
         "^pause.*",
     ],
+    # Not upstream: these two have a built-in hint menu that takes over the input and, with
+    # the bare "q" blocked, cannot be left
+    "borderzone": ["^(?:hints?|help|clues?)$"],
+    "sherlock": ["^(?:hints?|help|clues?)$"],
     "spellbreaker": [
         "^turn off zipper",
         "^turn on zipper",
@@ -55,16 +59,22 @@ EXTRA_BAD_ACTIONS = {
         "^ride .*?zipper",
     ],
 }
-# Not upstream: Frotz's own save/restore write and read <game>.qzl in the cwd, an uncounted rewind
-# that survives across runs. "restore N" is handled by the env before the blacklist is consulted.
-FILE_ACTIONS = [r"^save\b", r"^restore\b"]
-# Not upstream: the parser runs several commands from one line ("look. save", "look then quit"),
-# which gets these past the start-anchored patterns above
-CHAINED_ACTIONS = [r"(?:\.|\bthen\b)\s*(?:save|restore|script|unscript|quit|q)\b"]
+# Not upstream: commands that make the interpreter write or read a file in the cwd.
+# Frotz's own save/restore use <game>.qzl, an uncounted rewind that survives across runs;
+# "restore N" is handled by the env before the blacklist is consulted. "#record" and
+# "#command" are debugging verbs left in many of the games ("#random" reseeds the game).
+FILE_ACTIONS = [r"^(?:go\s+)?save\b", r"^(?:go\s+)?restore\b", r"^#"]
+# Per-game verb synonyms of SAVE and RESTORE, from each game's syntax file
+EXTRA_FILE_ACTIONS = {
+    "moonmist": [r"^resume\b"],
+    "seastalker": [r"^resume\b"],
+    "stationfall": [r"^rescue\b"],
+    "witness": [r"^suspend\b", r"^pause\b", r"^continue\b", r"^resume\b"],
+}
 BAD_ACTIONS = {
     game: EXTRA_BAD_ACTIONS.get(game, [])
     + COMMON_BAD_ACTIONS
     + FILE_ACTIONS
-    + CHAINED_ACTIONS
+    + EXTRA_FILE_ACTIONS.get(game, [])
     for game in GAMES
 }

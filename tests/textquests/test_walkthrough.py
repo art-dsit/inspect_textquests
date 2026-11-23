@@ -11,7 +11,6 @@ import pytest
 from textquests.data import load_walkthrough
 from textquests.env import TextQuestsEnv
 from textquests.game_info import GAMES, MAX_SCORES
-from textquests.verified import EXCLUDED, verified_checkpoints
 
 # game: (steps until finished, progress, max score, harm)
 EXPECTED = {
@@ -74,25 +73,11 @@ def test_checkpoint_text_split_by_a_marker_still_counts(data_dir: Path) -> None:
 
 
 @pytest.mark.dataset_download
-def test_verified_exclusions_match_the_checkpoint_file(data_dir: Path) -> None:
-    assert set(EXCLUDED) <= set(GAMES)
-    total = kept = 0
-    for game in GAMES:
-        percentages = set(TextQuestsEnv(data_dir / game).progress_checkpoints.values())
-        assert EXCLUDED.get(game, frozenset()) <= percentages, game
-        total += len(percentages)
-        kept += len(verified_checkpoints(game, percentages))
-    assert (total, sum(map(len, EXCLUDED.values())), kept) == (327, 50, 269)
-
-
-@pytest.mark.dataset_download
-@pytest.mark.parametrize("game", sorted(set(GAMES) - BROKEN_WALKTHROUGHS))
-def test_walkthrough_reaches_every_verified_checkpoint(
-    data_dir: Path, game: str
-) -> None:
+@pytest.mark.parametrize("game", sorted(BROKEN_WALKTHROUGHS))
+def test_fixed_walkthrough_finishes(data_dir: Path, game: str) -> None:
     env = TextQuestsEnv(data_dir / game)
     env.reset()
-    for action in load_walkthrough(game):
-        env.step(action)
-    verified = verified_checkpoints(game, set(env.progress_checkpoints.values()))
-    assert verified <= env.checkpoints_reached
+    progress = 0
+    for action in load_walkthrough(game, fixed=True):
+        progress = max(progress, env.step(action).progress)
+    assert progress == 100

@@ -26,7 +26,12 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai.util import store_as
 
 from textquests.data import ensure_data, load_walkthrough
-from textquests.env import StepResult, TextQuestsEnv, game_finished
+from textquests.env import (
+    PROGRESS_COMPLETE,
+    StepResult,
+    TextQuestsEnv,
+    game_finished,
+)
 from textquests.prompts import (
     GAME_OVER_FORMAT,
     JSON_GAME_OVER_FORMAT,
@@ -37,7 +42,6 @@ from textquests.prompts import (
     system_prompt,
 )
 from textquests.store import StepLog, TextQuestsStore
-from textquests.verified import verified_checkpoints
 
 DEFAULT_MAX_STEPS = 500
 DEFAULT_MAX_RETRIES = 3
@@ -107,6 +111,7 @@ def textquests_solver(
     seed: int = DEFAULT_SEED,
     canonicalize_history: bool = True,
     output_format: OutputFormat = DEFAULT_OUTPUT_FORMAT,
+    verified: bool = False,
 ) -> Solver:
     """Play one game with the active model.
 
@@ -121,6 +126,8 @@ def textquests_solver(
         output_format: Reply format the prompts ask for: "xml" (``<reasoning>/<action>``
             tags, the maintained upstream harness) or "json" (a ``{"reasoning", "action"}``
             block, the original harness that produced the paper's results).
+        verified: End the game on the verified 100% checkpoint, not upstream's, whose
+            string in several games also prints on a losing ending.
     """
     if output_format not in ("xml", "json"):
         raise ValueError(
@@ -199,7 +206,7 @@ def textquests_solver(
             )
             store.steps = step + 1
 
-            if game_finished(result.progress, result.score, env.max_score):
+            if _finished(env, result, verified):
                 store.ended = "finished"
                 break
 
@@ -224,7 +231,7 @@ def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
         store = store_as(TextQuestsStore)
         env = await _make_env(state, seed)
         result = env.reset()
-        for step, action in enumerate(load_walkthrough(env.game_name)):
+        for step, action in enumerate(load_walkthrough(env.game_name, fixed=True)):
             store.log.append(
                 StepLog(
                     step=step,
@@ -249,6 +256,14 @@ def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
         return state
 
     return solve
+
+
+def _finished(env: TextQuestsEnv, result: StepResult, verified: bool) -> bool:
+    if verified:
+        return (
+            PROGRESS_COMPLETE in env.verified_reached or result.score == env.max_score
+        )
+    return game_finished(result.progress, result.score, env.max_score)
 
 
 async def _make_env(state: TaskState, seed: int) -> TextQuestsEnv:
@@ -285,11 +300,8 @@ def _record(store: TextQuestsStore, result: StepResult, env: TextQuestsEnv) -> N
     store.progress = max(store.progress, result.progress)
     store.max_score = max(store.max_score, result.score)
     store.harm += result.harm
-    verified = verified_checkpoints(
-        env.game_name, set(env.progress_checkpoints.values())
-    )
     store.checkpoints = sorted(env.checkpoints_reached)
-    store.verified_reached = len(env.checkpoints_reached & verified)
-    store.verified_total = len(verified)
+    store.verified_checkpoints = sorted(env.verified_reached)
+    store.verified_total = len(set(env.verified_checkpoints.values()))
     store.restores = env.total_restores
     store.restarts = env.total_restarts

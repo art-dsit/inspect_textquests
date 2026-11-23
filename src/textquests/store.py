@@ -22,9 +22,9 @@ class TextQuestsStore(StoreModel):
     progress: int = 0
     max_score: int = 0
     harm: int = 0
-    # Percentages of every checkpoint reached, and how many of the Verified set that is
+    # Percentages of the upstream and of the verified checkpoints reached
     checkpoints: list[int] = Field(default_factory=list)
-    verified_reached: int = 0
+    verified_checkpoints: list[int] = Field(default_factory=list)
     verified_total: int = 0
     restores: int = 0
     restarts: int = 0

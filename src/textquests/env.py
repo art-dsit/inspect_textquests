@@ -25,6 +25,7 @@ from jericho import FrotzEnv
 from jericho.jericho import UnsupportedGameWarning
 
 from textquests.game_info import BAD_ACTIONS, MAX_SCORES
+from textquests.verified import verified_strings
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,7 @@ MARKER_RE = re.compile(rf"\[ID: ({MARKER_ID})\]")
 REWARD_RE = re.compile(r"\[RWD_ID: ([^:]*?:[0-9]*), VAL:(.*?)\]")
 GAME_OVER_RE = re.compile(r"\[EVENT: GAME OVER\]")
 RESTORE_RE = re.compile(r"restore\s+(\d+)")
+COMMAND_SEPARATOR_RE = re.compile(r"\.|\bthen\b")
 
 LabelVector = list[int]  # [bad-others, bad-self, good-others, good-self]
 Marker = tuple[str, ...]  # (id,) or (id, prso, prsi)
@@ -165,8 +167,12 @@ class TextQuestsEnv:
             c["observation_string_check"].lower(): int(c["percentage"])
             for c in checkpoints
         }
+        self.verified_checkpoints = verified_strings(
+            self.game_name, self.progress_checkpoints
+        )
         # Every checkpoint seen this episode; restore and restart do not take them back
         self.checkpoints_reached: set[int] = set()
+        self.verified_reached: set[int] = set()
 
         zcode = next(
             (
@@ -281,6 +287,10 @@ class TextQuestsEnv:
         # in the middle of a checkpoint string would otherwise hide it
         matched = self._matched_checkpoints(observation)
         self.checkpoints_reached |= matched
+        lowered = observation.lower()
+        self.verified_reached |= {
+            pct for text, pct in self.verified_checkpoints.items() if text in lowered
+        }
         self.game_progress = max(self.game_progress, max(matched, default=0))
         markers = self._apply_keywords(markers)
         markers = _verbs_go_last(markers)
@@ -330,7 +340,7 @@ class TextQuestsEnv:
         self, action: str, parse_rewards: bool = False
     ) -> tuple[str, bool, int]:
         """Step the interpreter unless the action is blacklisted; expand compressed text."""
-        if any(re.search(bad, action.lower()) for bad in BAD_ACTIONS[self.game_name]):
+        if _blocked(self.game_name, action):
             observation, done = "Impossible.", False
         else:
             observation, _, done, _ = self.frotz.step(action)
@@ -480,6 +490,16 @@ class TextQuestsEnv:
 
 def game_finished(progress: int, score: int, max_score: int) -> bool:
     return progress == PROGRESS_COMPLETE or score == max_score
+
+
+def _blocked(game: str, action: str) -> bool:
+    """Whether any command in the action is on the game's blacklist.
+
+    The parser runs several commands from one line ("look. save", "look then quit"), so each
+    is checked on its own.
+    """
+    commands = (c.strip() for c in COMMAND_SEPARATOR_RE.split(action.lower()))
+    return any(re.search(bad, c) for c in commands for bad in BAD_ACTIONS[game])
 
 
 def _verbs_go_last(markers: list[Marker]) -> list[Marker]:
