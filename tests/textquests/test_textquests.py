@@ -27,7 +27,11 @@ def test_task_construction(monkeypatch: pytest.MonkeyPatch) -> None:
     task = textquests()
     assert len(task.dataset) == 25
     assert task.version == EVAL_VERSION
-    assert task.metadata == {"with_clues": False, "max_steps": 500}
+    assert task.metadata == {
+        "with_clues": False,
+        "max_steps": 500,
+        "output_format": "xml",
+    }
     assert len(textquests_walkthrough(games="zork1").dataset) == 1
     with pytest.raises(ValueError, match="max_steps"):
         textquests(max_steps=0)

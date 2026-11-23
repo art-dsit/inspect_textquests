@@ -6,7 +6,10 @@ Results accumulate in TextQuestsStore after every step so the scorer still has t
 sample is cut short by an Inspect limit or an error.
 """
 
+import json
 import re
+from collections.abc import Callable
+from typing import Any, Literal
 
 import anyio
 from inspect_ai.log import transcript
@@ -26,7 +29,10 @@ from textquests.data import ensure_data, load_walkthrough
 from textquests.env import StepResult, TextQuestsEnv, game_finished
 from textquests.prompts import (
     GAME_OVER_FORMAT,
+    JSON_GAME_OVER_FORMAT,
     canonical_response,
+    json_canonical_response,
+    json_system_prompt,
     observation_prompt,
     system_prompt,
 )
@@ -35,6 +41,8 @@ from textquests.store import StepLog, TextQuestsStore
 DEFAULT_MAX_STEPS = 500
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_SEED = 1
+OutputFormat = Literal["xml", "json"]
+DEFAULT_OUTPUT_FORMAT: OutputFormat = "xml"
 
 REASONING_RE = re.compile(r"<reasoning>(.*?)</reasoning>", re.DOTALL | re.IGNORECASE)
 ACTION_RE = re.compile(r"<action>(.*?)</action>", re.DOTALL | re.IGNORECASE)
@@ -49,6 +57,47 @@ def parse_response(content: str) -> tuple[str, str | None]:
     return reasoning, action
 
 
+JSON_BLOCK_RE = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
+JSON_OBJECT_RE = re.compile(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", re.DOTALL)
+
+
+def parse_json_response(content: str) -> tuple[Any, str | None]:
+    """Extract (reasoning, action) from a JSON reply, as the original harness does.
+
+    Port of extract_json_with_keys in
+    https://github.com/centerforaisafety/textquests/blob/18dc472/src/llm_agents.py: the whole
+    reply as JSON, else the last ```json block, else the last brace-balanced object. Both
+    keys are required. The reasoning is returned as parsed, since that is what the original
+    writes back into the history.
+    """
+    parsed = _extract_json(content)
+    if not isinstance(parsed, dict) or not {"reasoning", "action"} <= parsed.keys():
+        return "", None
+    return parsed["reasoning"], str(parsed["action"])
+
+
+def _extract_json(content: str) -> Any:
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    candidate = None
+    if "```json" in content:
+        blocks = JSON_BLOCK_RE.findall(content)
+        if blocks:
+            candidate = blocks[-1]
+    if not candidate:
+        objects = JSON_OBJECT_RE.findall(content)
+        if objects:
+            candidate = objects[-1]
+    if candidate:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
 @solver
 def textquests_solver(
     max_steps: int = DEFAULT_MAX_STEPS,
@@ -56,6 +105,7 @@ def textquests_solver(
     max_retries: int = DEFAULT_MAX_RETRIES,
     seed: int = DEFAULT_SEED,
     canonicalize_history: bool = True,
+    output_format: OutputFormat = DEFAULT_OUTPUT_FORMAT,
 ) -> Solver:
     """Play one game with the active model.
 
@@ -67,7 +117,23 @@ def textquests_solver(
         canonicalize_history: Rewrite each assistant turn in the history to the bare
             ``<reasoning>/<action>`` form, as upstream does. The model's original output is
             still in the transcript. Set False to keep the raw output in the history.
+        output_format: Reply format the prompts ask for: "xml" (``<reasoning>/<action>``
+            tags, the maintained upstream harness) or "json" (a ``{"reasoning", "action"}``
+            block, the original harness that produced the paper's results).
     """
+    if output_format not in ("xml", "json"):
+        raise ValueError(
+            f"output_format must be 'xml' or 'json', got {output_format!r}"
+        )
+    as_json = output_format == "json"
+    make_system_prompt = json_system_prompt if as_json else system_prompt
+    game_over_format = JSON_GAME_OVER_FORMAT if as_json else GAME_OVER_FORMAT
+    parse: Callable[[str], tuple[Any, str | None]] = (
+        parse_json_response if as_json else parse_response
+    )
+    canonical: Callable[[Any, str], str] = (
+        json_canonical_response if as_json else canonical_response
+    )
     if max_steps < 1:
         raise ValueError(f"max_steps must be at least 1, got {max_steps}")
     if max_retries < 1:
@@ -79,7 +145,7 @@ def textquests_solver(
         result = env.reset()
         state.messages = [
             ChatMessageSystem(
-                content=system_prompt(
+                content=make_system_prompt(
                     game_name=env.game_name,
                     max_score=env.max_score,
                     guidelines=env.guidelines,
@@ -93,14 +159,14 @@ def textquests_solver(
 
         for step in range(max_steps):
             if game_over:
-                observation += GAME_OVER_FORMAT
+                observation += game_over_format
             state.messages.append(
                 ChatMessageUser(
                     content=observation_prompt(result.score, observation, step)
                 )
             )
 
-            parsed = await _get_action(model, state.messages, max_retries)
+            parsed = await _get_action(model, state.messages, max_retries, parse)
             if isinstance(parsed, str):
                 store.ended = parsed
                 break
@@ -109,7 +175,7 @@ def textquests_solver(
             if canonicalize_history:
                 state.messages.append(
                     ChatMessageAssistant(
-                        content=canonical_response(reasoning, action),
+                        content=canonical(reasoning, action),
                         model=output.model,
                     )
                 )
@@ -123,7 +189,9 @@ def textquests_solver(
                     score=result.score,
                     progress=result.progress,
                     game_over=game_over,
-                    reasoning=reasoning,
+                    reasoning=reasoning
+                    if isinstance(reasoning, str)
+                    else json.dumps(reasoning),
                     action=action,
                     label_vectors=result.label_vectors,
                 )
@@ -188,22 +256,25 @@ async def _make_env(state: TaskState, seed: int) -> TextQuestsEnv:
 
 
 async def _get_action(
-    model: Model, messages: list[ChatMessage], max_retries: int
-) -> tuple[str, str, ModelOutput] | str:
-    """Generate against the unchanged history until the reply contains an <action>.
+    model: Model,
+    messages: list[ChatMessage],
+    max_retries: int,
+    parse: Callable[[str], tuple[Any, str | None]],
+) -> tuple[Any, str, ModelOutput] | str:
+    """Generate against the unchanged history until the reply contains an action.
 
     Returns the parsed reply, or the reason the episode has to end.
     """
     for attempt in range(1, max_retries + 1):
         output = await model.generate(messages)
-        reasoning, action = parse_response(output.completion)
+        reasoning, action = parse(output.completion)
         if action is not None:
             return reasoning, action, output
         if output.stop_reason == "model_length":
             transcript().info("History no longer fits the model's context window.")
             return "context_limit"
         transcript().info(
-            f"No <action> tag in model output (attempt {attempt}/{max_retries}): "
+            f"No action in model output (attempt {attempt}/{max_retries}): "
             f"{output.completion[:200]!r}"
         )
     return "parse_failure"

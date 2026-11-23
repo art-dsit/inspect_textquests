@@ -6,8 +6,17 @@ from inspect_ai.log import EvalLog, EvalSample
 from inspect_ai.model import ModelOutput, get_model
 
 from textquests.game_info import MAX_SCORES
-from textquests.prompts import GAME_OVER_FORMAT, canonical_response
-from textquests.solver import parse_response, textquests_solver
+from textquests.prompts import (
+    GAME_OVER_FORMAT,
+    canonical_response,
+    json_canonical_response,
+    json_system_prompt,
+)
+from textquests.solver import (
+    parse_json_response,
+    parse_response,
+    textquests_solver,
+)
 from textquests.store import TextQuestsStore
 from textquests.textquests import textquests
 
@@ -37,11 +46,54 @@ def test_parse_response() -> None:
     assert parse_response("<action>unterminated") == ("", None)
 
 
+def test_parse_json_response() -> None:
+    block = '```json\n{"reasoning": "think", "action": "go north"}\n```'
+    assert parse_json_response(block) == ("think", "go north")
+    assert parse_json_response('{"reasoning": "r", "action": "look"}') == ("r", "look")
+    assert parse_json_response(
+        f"First draft:\n{block}\nFinal:\n" + block.replace("north", "south")
+    ) == (
+        "think",
+        "go south",
+    ), "the last block wins"
+    assert parse_json_response('I will {"reasoning": "r", "action": 3} now') == (
+        "r",
+        "3",
+    )
+    assert parse_json_response('{"reasoning": ["a", "b"], "action": "x"}') == (
+        ["a", "b"],
+        "x",
+    )
+    for unusable in [
+        "I will go north.",
+        '{"action": "look"}',
+        '```json\n{"reasoning": "r", "action": look}\n```',
+        '["reasoning", "action"]',
+        "<reasoning>r</reasoning><action>look</action>",
+    ]:
+        assert parse_json_response(unusable) == ("", None)
+
+
+def test_json_system_prompt_is_the_original_harness_text() -> None:
+    prompt = json_system_prompt("zork1", 350, guidelines="MANUAL", invisiclues="CLUES")
+    assert (
+        "Here are the original Guideline and Clues for the game zork1:\n"
+        "    =====[Invisiclues]=====\nCLUES\n=====[Feelies]=====\nMANUAL\n\n    \n\n"
+        "[OUTPUT FORMAT DURING GAME TURNS]\n"
+        "Return a final json block with the following format (make sure the final json "
+        "block is wrapped around ```json\n{}\n```):\n```json\n{\n"
+        '    "reasoning": "<your step-by-step reasoning for action.>", \n'
+        '    "action": <action to take>\n}\n```\n'
+    ) in prompt
+
+
 def test_textquests_solver_validates_arguments() -> None:
     with pytest.raises(ValueError, match="max_steps"):
         textquests_solver(max_steps=0)
     with pytest.raises(ValueError, match="max_retries"):
         textquests_solver(max_retries=0)
+    with pytest.raises(ValueError, match="output_format"):
+        textquests_solver(output_format="yaml")  # type: ignore[arg-type]
 
 
 def turn(action: str, reasoning: str = "because") -> ModelOutput:
@@ -137,6 +189,26 @@ def test_with_clues_and_raw_history() -> None:
     messages = first_sample(log).messages
     assert "=====[Invisiclues]=====" in messages[0].text
     assert messages[2].role == "assistant"
+
+
+@pytest.mark.dataset_download
+def test_json_output_format() -> None:
+    def json_turn(action: str) -> ModelOutput:
+        return ModelOutput.from_content(
+            MOCK_MODEL, f"Thinking aloud.\n{json_canonical_response('because', action)}"
+        )
+
+    log = run(
+        [json_turn("north"), turn("east"), json_turn("east")],
+        max_steps=2,
+        output_format="json",
+    )
+    sample = first_sample(log)
+    store = sample.store_as(TextQuestsStore)
+    assert "Return a final json block" in sample.messages[0].text
+    assert sample.messages[2].text == json_canonical_response("because", "north")
+    assert [entry.action for entry in store.log] == ["north", "east"]
+    assert store.ended == "max_steps", "the tagged reply was retried, not accepted"
 
 
 @pytest.mark.dataset_download

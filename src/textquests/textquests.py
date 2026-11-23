@@ -14,7 +14,9 @@ from textquests.scorer import textquests_scorer
 from textquests.solver import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_MAX_STEPS,
+    DEFAULT_OUTPUT_FORMAT,
     DEFAULT_SEED,
+    OutputFormat,
     textquests_solver,
     walkthrough_solver,
 )
@@ -56,6 +58,7 @@ def textquests(
     max_retries: int = DEFAULT_MAX_RETRIES,
     seed: int = DEFAULT_SEED,
     canonicalize_history: bool = True,
+    output_format: OutputFormat = DEFAULT_OUTPUT_FORMAT,
 ) -> Task:
     """TextQuests benchmark.
 
@@ -68,6 +71,9 @@ def textquests(
         seed: Z-machine random seed (upstream uses 1).
         canonicalize_history: Rewrite assistant turns to bare <reasoning>/<action> text in the
             history, as upstream does. Set False to keep the raw model output.
+        output_format: Reply format the prompts ask for. "xml" is the maintained upstream
+            harness (<reasoning>/<action> tags); "json" is the original harness that produced
+            the paper's results (a {"reasoning", "action"} block).
     """
     return Task(
         dataset=games_dataset(games),
@@ -77,10 +83,15 @@ def textquests(
             max_retries=max_retries,
             seed=seed,
             canonicalize_history=canonicalize_history,
+            output_format=output_format,
         ),
         scorer=textquests_scorer(),
         version=EVAL_VERSION,
-        metadata={"with_clues": with_clues, "max_steps": max_steps},
+        metadata={
+            "with_clues": with_clues,
+            "max_steps": max_steps,
+            "output_format": output_format,
+        },
     )
 
 

@@ -16,7 +16,8 @@ Source: https://github.com/centerforaisafety/textquests
 Included in:
   src/textquests/env.py        (port of src/textquests_env.py)
   src/textquests/game_info.py  (max scores and bad-action regexes from src/game_info.py)
-  src/textquests/prompts.py    (prompt text from textquests_eval.py, verbatim)
+  src/textquests/prompts.py    (prompt text from textquests_eval.py and play_textquests.py, verbatim)
+  src/textquests/solver.py     (JSON reply extraction from src/llm_agents.py)
 
 ---
 
