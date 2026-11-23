@@ -268,6 +268,41 @@ def test_verified_halted_interpreter_is_game_over_and_restore_recovers(
     assert result.observation.startswith("(office)") and result.done is False
 
 
+@pytest.mark.dataset_download
+@pytest.mark.parametrize(
+    ("game", "upto", "kept"),
+    [
+        ("deadline", 15, ["Time passes..."]),
+        (
+            "witness",
+            5,
+            [
+                "Suddenly, a clap of thunder rolls across the hills outside.",
+                "Without warning, lightning flashes outside",
+                "Rain begins to fall outside in a sprinkle.",
+            ],
+        ),
+        ("suspect", 68, ["Michael stops here."]),
+        (
+            "seastalker",
+            47,
+            ["You have just passed through the opening in the sea wall"],
+        ),
+    ],
+)
+def test_verified_status_line_redraws_removed_and_event_text_kept(
+    data_dir: Path, game: str, upto: int, kept: list[str]
+) -> None:
+    # Multi-turn waits from the walkthroughs: one status-line redraw per game minute or move
+    env = TextQuestsEnv(data_dir / game, verified=True)
+    walk = load_walkthrough(game, fixed=True)
+    observations = play(env, walk[: upto + 1])
+    joined = "\n".join(observations[-3:])
+    assert "Time:" not in joined and "Moves:" not in joined
+    for text in kept:
+        assert text in joined
+
+
 def test_unknown_game_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unknown game"):
         TextQuestsEnv(tmp_path / "notagame")

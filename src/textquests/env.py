@@ -111,6 +111,16 @@ REWARD_RE = re.compile(r"\[RWD_ID: ([^:]*?:[0-9]*), VAL:(.*?)\]")
 GAME_OVER_RE = re.compile(r"\[EVENT: GAME OVER\]")
 RESTORE_RE = re.compile(r"restore\s+(\d+)")
 COMMAND_SEPARATOR_RE = re.compile(r"\.|\bthen\b")
+# One status-line redraw in verified mode. Redraws during a multi-turn wait come one per game
+# minute, often run together on one line, and the game's own text can follow on that line.
+# The location name is single-spaced and padded to the right-hand fields.
+_STATUS_LOCATION = r"(?:^|(?<=  ))[ >]*[^ \n](?:[^ \n]| (?! ))*? {2,}"
+TIME_STATUS_RE = re.compile(
+    _STATUS_LOCATION + r"Time: +\d{1,2}:\d\d [ap]m *\n?", re.MULTILINE
+)
+SCORE_MOVES_STATUS_RE = re.compile(
+    _STATUS_LOCATION + r"Score: +-?\d+ +Moves: +\d+ *\n?", re.MULTILINE
+)
 # The markers printed with an ending's text, which belong to it
 ENDING_TAIL_RE = re.compile(r"(?:\s*\[(?:RWD_)?ID: [^\]]*\])*")
 
@@ -171,7 +181,8 @@ class TextQuestsEnv:
             seed: Seed for the Z-machine interpreter's random number generator.
             verified: Fix the environment faults shared with upstream: report game over
                 exactly when actions are refused, detect the endings that print no
-                [EVENT: GAME OVER] marker, and read the score on the final turn.
+                [EVENT: GAME OVER] marker, read the score on the final turn, and strip
+                every status-line redraw.
         """
         self.game_folder = Path(game_folder)
         self.verified = verified
@@ -427,6 +438,10 @@ class TextQuestsEnv:
         }
 
     def _remove_status_line(self, observation: str) -> str:
+        if self.verified and self.game_name in SCORE_MOVES_STATUS_GAMES:
+            return SCORE_MOVES_STATUS_RE.sub("", observation)
+        if self.verified and self.game_name in TIME_STATUS_GAMES:
+            return TIME_STATUS_RE.sub("", observation)
         if self.game_name in SCORE_MOVES_STATUS_GAMES:
             return re.sub(r".+Score: .+Moves: .+\n", "", observation)
         if self.game_name in TIME_STATUS_GAMES:
