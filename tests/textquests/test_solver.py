@@ -290,6 +290,18 @@ def test_parse_failure_retries_then_ends_episode() -> None:
 
 
 @pytest.mark.dataset_download
+def test_default_retries_follow_the_output_format() -> None:
+    junk = ModelOutput.from_content(MOCK_MODEL, "I don't know what to do.")
+    json_north = ModelOutput.from_content(
+        MOCK_MODEL, json_canonical_response("because", "north")
+    )
+    log = run([junk] * 9 + [json_north], max_steps=1, output_format="json")
+    assert first_sample(log).store_as(TextQuestsStore).ended == "max_steps"
+    log = run([junk] * 3 + [turn("north")], max_steps=1)
+    assert first_sample(log).store_as(TextQuestsStore).ended == "parse_failure"
+
+
+@pytest.mark.dataset_download
 def test_context_overflow_ends_episode_without_retrying() -> None:
     overflow = ModelOutput.from_content(
         MOCK_MODEL, "prompt is too long", stop_reason="model_length"

@@ -50,10 +50,11 @@ from textquests.prompts import (
 from textquests.store import StepLog, TextQuestsStore
 
 DEFAULT_MAX_STEPS = 500
-DEFAULT_MAX_RETRIES = 3
 DEFAULT_SEED = 1
 OutputFormat = Literal["xml", "json"]
 DEFAULT_OUTPUT_FORMAT: OutputFormat = "xml"
+# Each upstream harness's default: the maintained one (tags) 3, the original (JSON) 10
+DEFAULT_MAX_RETRIES: dict[OutputFormat, int] = {"xml": 3, "json": 10}
 
 REASONING_RE = re.compile(r"<reasoning>(.*?)</reasoning>", re.DOTALL | re.IGNORECASE)
 ACTION_RE = re.compile(r"<action>(.*?)</action>", re.DOTALL | re.IGNORECASE)
@@ -113,7 +114,7 @@ def _extract_json(content: str) -> Any:
 def textquests_solver(
     max_steps: int = DEFAULT_MAX_STEPS,
     with_clues: bool = False,
-    max_retries: int = DEFAULT_MAX_RETRIES,
+    max_retries: int | None = None,
     seed: int = DEFAULT_SEED,
     canonicalize_history: bool = True,
     output_format: OutputFormat = DEFAULT_OUTPUT_FORMAT,
@@ -124,7 +125,8 @@ def textquests_solver(
     Args:
         max_steps: Maximum number of actions per game.
         with_clues: Include the game's InvisiClues hint booklet in the system prompt.
-        max_retries: Attempts to get a parseable ``<action>`` before giving up on the game.
+        max_retries: Attempts to get a parseable reply before giving up on the game; by
+            default 3 for "xml" and 10 for "json", as in the corresponding upstream harness.
         seed: Seed for the Z-machine interpreter's random number generator.
         canonicalize_history: Rewrite each assistant turn in the history to the bare
             ``<reasoning>/<action>`` form, as upstream does. The model's original output is
@@ -153,8 +155,11 @@ def textquests_solver(
     )
     if max_steps < 1:
         raise ValueError(f"max_steps must be at least 1, got {max_steps}")
-    if max_retries < 1:
-        raise ValueError(f"max_retries must be at least 1, got {max_retries}")
+    attempts = (
+        DEFAULT_MAX_RETRIES[output_format] if max_retries is None else max_retries
+    )
+    if attempts < 1:
+        raise ValueError(f"max_retries must be at least 1, got {attempts}")
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         store = store_as(TextQuestsStore)
@@ -189,7 +194,7 @@ def textquests_solver(
             else:
                 state.messages.append(ChatMessageUser(content=prompt))
 
-            parsed = await _get_action(model, state.messages, max_retries, parse)
+            parsed = await _get_action(model, state.messages, attempts, parse)
             if isinstance(parsed, str):
                 store.ended = parsed
                 break

@@ -12,7 +12,6 @@ from inspect_ai.dataset import MemoryDataset, Sample
 from textquests.game_info import GAMES, MAX_SCORES
 from textquests.scorer import textquests_scorer
 from textquests.solver import (
-    DEFAULT_MAX_RETRIES,
     DEFAULT_MAX_STEPS,
     DEFAULT_OUTPUT_FORMAT,
     DEFAULT_SEED,
@@ -55,7 +54,7 @@ def textquests(
     games: str | list[str] | None = None,
     max_steps: int = DEFAULT_MAX_STEPS,
     with_clues: bool = False,
-    max_retries: int = DEFAULT_MAX_RETRIES,
+    max_retries: int | None = None,
     seed: int = DEFAULT_SEED,
     canonicalize_history: bool = True,
     output_format: OutputFormat = DEFAULT_OUTPUT_FORMAT,
@@ -67,7 +66,8 @@ def textquests(
         max_steps: Maximum number of actions per game (upstream default 500).
         with_clues: Include the official InvisiClues hint booklet in the system prompt
             (the "with clues" leaderboard setting). Off by default.
-        max_retries: Attempts to get a parseable <action> before abandoning the game.
+        max_retries: Attempts to get a parseable reply before abandoning the game. By
+            default the upstream harness's for the output format: 3 for "xml", 10 for "json".
         seed: Z-machine random seed (upstream uses 1).
         canonicalize_history: Rewrite assistant turns to bare <reasoning>/<action> text in the
             history, as upstream does. Set False to keep the raw model output.
@@ -97,6 +97,7 @@ def textquests(
 
 # Provisional: to be settled by full runs in both formats
 VERIFIED_OUTPUT_FORMAT: OutputFormat = "json"
+VERIFIED_MAX_RETRIES = 3
 
 
 @task
@@ -113,7 +114,11 @@ def textquests_verified(games: str | list[str] | None = None) -> Task:
     """
     return Task(
         dataset=games_dataset(games),
-        solver=textquests_solver(output_format=VERIFIED_OUTPUT_FORMAT, verified=True),
+        solver=textquests_solver(
+            output_format=VERIFIED_OUTPUT_FORMAT,
+            max_retries=VERIFIED_MAX_RETRIES,
+            verified=True,
+        ),
         scorer=textquests_scorer(),
         version=EVAL_VERSION,
         metadata={"output_format": VERIFIED_OUTPUT_FORMAT},
