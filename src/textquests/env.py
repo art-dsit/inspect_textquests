@@ -24,7 +24,12 @@ from typing import Any
 from jericho import FrotzEnv
 from jericho.jericho import UnsupportedGameWarning
 
-from textquests.game_info import BAD_ACTIONS, MAX_SCORES, PACKAGE_SCANS
+from textquests.game_info import (
+    BAD_ACTIONS,
+    MAX_SCORES,
+    PACKAGE_SCANS,
+    UNMARKED_ENDINGS,
+)
 from textquests.verified import verified_strings
 
 logger = logging.getLogger(__name__)
@@ -106,6 +111,8 @@ REWARD_RE = re.compile(r"\[RWD_ID: ([^:]*?:[0-9]*), VAL:(.*?)\]")
 GAME_OVER_RE = re.compile(r"\[EVENT: GAME OVER\]")
 RESTORE_RE = re.compile(r"restore\s+(\d+)")
 COMMAND_SEPARATOR_RE = re.compile(r"\.|\bthen\b")
+# The markers printed with an ending's text, which belong to it
+ENDING_TAIL_RE = re.compile(r"(?:\s*\[(?:RWD_)?ID: [^\]]*\])*")
 
 LabelVector = list[int]  # [bad-others, bad-self, good-others, good-self]
 Marker = tuple[str, ...]  # (id,) or (id, prso, prsi)
@@ -121,7 +128,9 @@ class Annotation:
 class StepResult:
     observation: str
     reward: int
-    done: bool  # Jericho's own game-over/victory flag, distinct from the [EVENT: GAME OVER] marker
+    # Jericho's own game-over/victory flag, distinct from the [EVENT: GAME OVER] marker; in
+    # verified mode, whether the game has ended and actions are refused
+    done: bool
     score: int
     progress: int
     label_vectors: list[LabelVector] = field(default_factory=list)
@@ -152,8 +161,20 @@ class Checkpoint:
 
 
 class TextQuestsEnv:
-    def __init__(self, game_folder: Path, seed: int = 1) -> None:
+    def __init__(
+        self, game_folder: Path, seed: int = 1, verified: bool = False
+    ) -> None:
+        """Load a game and reset it.
+
+        Args:
+            game_folder: The game's directory in the data.
+            seed: Seed for the Z-machine interpreter's random number generator.
+            verified: Fix the environment faults shared with upstream: report game over
+                exactly when actions are refused, detect the endings that print no
+                [EVENT: GAME OVER] marker, and read the score on the final turn.
+        """
         self.game_folder = Path(game_folder)
+        self.verified = verified
         self.game_name = self.game_folder.name
         if self.game_name not in MAX_SCORES:
             raise ValueError(f"Unknown game {self.game_name!r}")
@@ -268,10 +289,17 @@ class TextQuestsEnv:
             warning = f"System Warning: Invalid length action command: {action}"
             action = action[:MAX_ACTION_LENGTH]
 
-        observation, done, parsed_reward = self._pre_step(action, parse_rewards=True)
+        observation, done = self._pre_step(action)
+        ended = False
+        if self.verified:
+            observation, ended = self._unmarked_ending(observation)
+        observation, parsed_reward = self._parse_rewards(observation)
         self.state.steps += 1
 
         observation, found_game_over = self._parse_game_over(observation)
+        if self.verified:
+            found_game_over = found_game_over or ended
+            done = found_game_over
         self.state.game_over = found_game_over
 
         if self.game_name not in CUSTOM_REWARD_GAMES:
@@ -330,6 +358,9 @@ class TextQuestsEnv:
         if checkpoint_id < 0 or checkpoint_id >= len(self.checkpoints):
             return None
         checkpoint = self.checkpoints[checkpoint_id]
+        if self.verified and self.frotz._emulator_halted():
+            # Setting the state does not clear the halt; only a reset does
+            self.frotz.reset()
         self.frotz.set_state(copy.deepcopy(checkpoint.frotz_state))
         self.state = copy.deepcopy(checkpoint.state)
         self.state.game_over = False
@@ -340,24 +371,40 @@ class TextQuestsEnv:
         result.done = False
         return result
 
-    def _pre_step(
-        self, action: str, parse_rewards: bool = False
-    ) -> tuple[str, bool, int]:
+    def _pre_step(self, action: str) -> tuple[str, bool]:
         """Step the interpreter unless the action is blacklisted; expand compressed text."""
         if _blocked(self.game_name, action):
             observation, done = "Impossible.", False
         else:
             observation, _, done, _ = self.frotz.step(action)
-        observation = self._replace_text(observation)
-        reward = 0
-        if parse_rewards:
-            observation, reward = self._parse_rewards(observation)
-        return observation, done, reward
+        return self._replace_text(observation), done
 
     def _replace_text(self, observation: str) -> str:
         for key, replacement in self.replacement_dict.items():
             observation = observation.replace(f"[RIDX: {key}]", replacement)
         return observation
+
+    def _unmarked_ending(self, observation: str) -> tuple[str, bool]:
+        """Detect an ending that prints no [EVENT: GAME OVER] marker, or a halted interpreter.
+
+        Returns the observation cut after the ending's text, and whether the game has ended.
+        The interpreter does not stop at the Z-machine's QUIT: what it prints after the
+        ending is play that the game never meant to happen.
+        """
+        if self.frotz._emulator_halted():
+            return observation, True
+        ends = [
+            found + len(text)
+            for text in UNMARKED_ENDINGS.get(self.game_name, ())
+            if (found := observation.find(text)) >= 0
+        ]
+        if not ends:
+            return observation, False
+        end = min(ends)
+        tail = ENDING_TAIL_RE.match(observation[end:])
+        if tail:
+            end += tail.end()
+        return observation[:end] + "\n", True
 
     def _parse_rewards(self, observation: str) -> tuple[str, int]:
         reward = 0
@@ -440,7 +487,7 @@ class TextQuestsEnv:
     def _probe(self, command: str) -> str:
         """Run a command and roll the interpreter back, returning only its text."""
         saved = (copy.deepcopy(self.frotz.get_state()), copy.deepcopy(self.state))
-        observation, _, _ = self._pre_step(command)
+        observation, _ = self._pre_step(command)
         self.frotz.set_state(saved[0])
         self.state = saved[1]
         return observation

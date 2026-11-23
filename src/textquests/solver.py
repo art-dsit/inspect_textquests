@@ -132,10 +132,11 @@ def textquests_solver(
         output_format: Reply format the prompts ask for: "xml" (``<reasoning>/<action>``
             tags, the maintained upstream harness) or "json" (a ``{"reasoning", "action"}``
             block, the original harness that produced the paper's results).
-        verified: End the game on the verified 100% checkpoint, not upstream's, whose
-            string in several games also prints on a losing ending; and show the model,
-            with the first turn, the scanned package items the game cannot be finished
-            without.
+        verified: End the game when it ends after the verified 100% checkpoint, not
+            on upstream's, whose string in several games also prints on a losing ending;
+            show the model, with the first turn, the scanned package items the game
+            cannot be finished without; and play in the corrected environment (see
+            `TextQuestsEnv`).
     """
     if output_format not in ("xml", "json"):
         raise ValueError(
@@ -157,7 +158,7 @@ def textquests_solver(
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         store = store_as(TextQuestsStore)
-        env = await _make_env(state, seed)
+        env = await _make_env(state, seed, verified)
         result = env.reset()
         state.messages = [
             ChatMessageSystem(
@@ -237,12 +238,18 @@ def textquests_solver(
 
 
 @solver
-def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
-    """Oracle: replay the game's bundled walkthrough instead of asking a model."""
+def walkthrough_solver(seed: int = DEFAULT_SEED, verified: bool = False) -> Solver:
+    """Oracle: replay the game's bundled walkthrough instead of asking a model.
+
+    Args:
+        seed: Seed for the Z-machine interpreter's random number generator.
+        verified: Play in the corrected environment and end the game as
+            `textquests_solver(verified=True)` does.
+    """
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         store = store_as(TextQuestsStore)
-        env = await _make_env(state, seed)
+        env = await _make_env(state, seed, verified)
         result = env.reset()
         for step, action in enumerate(load_walkthrough(env.game_name, fixed=True)):
             store.log.append(
@@ -258,7 +265,7 @@ def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
                 )
             )
             store.steps = step + 1
-            if game_finished(result.progress, result.score, env.max_score):
+            if _finished(env, result, verified):
                 store.ended = "finished"
                 break
             env.save_checkpoint(result.observation, result)
@@ -277,15 +284,17 @@ def _jpeg_data_uri(path: Path) -> str:
 
 def _finished(env: TextQuestsEnv, result: StepResult, verified: bool) -> bool:
     if verified:
-        return (
-            PROGRESS_COMPLETE in env.verified_reached or result.score == env.max_score
-        )
+        # Several games award their last points after the 100% text, as the game ends
+        won = PROGRESS_COMPLETE in env.verified_reached and env.state.game_over
+        return won or result.score == env.max_score
     return game_finished(result.progress, result.score, env.max_score)
 
 
-async def _make_env(state: TaskState, seed: int) -> TextQuestsEnv:
+async def _make_env(state: TaskState, seed: int, verified: bool) -> TextQuestsEnv:
     data = await anyio.to_thread.run_sync(ensure_data)
-    return TextQuestsEnv(data / str(state.metadata["game"]), seed=seed)
+    return TextQuestsEnv(
+        data / str(state.metadata["game"]), seed=seed, verified=verified
+    )
 
 
 async def _get_action(

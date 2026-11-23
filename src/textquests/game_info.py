@@ -90,3 +90,24 @@ BAD_ACTIONS = {
     + EXTRA_FILE_ACTIONS.get(game, [])
     for game in GAMES
 }
+
+# Endings that print no [EVENT: GAME OVER] marker, by the end of the text the game prints
+# only there. Except in borderzone, whose FINISH waits for a CONTINUE that a failed chapter
+# cannot take, each is followed by the Z-machine's QUIT, which this interpreter does not stop
+# at: the game carries on as if the ending had not happened. Used by the verified environment.
+UNMARKED_ENDINGS: dict[str, tuple[str, ...]] = {
+    "borderzone": ("(Type RESTART, RESTORE, HINT, or QUIT)",),
+    "deadline": (
+        "you go off into the sunset.",  # the 8 pm time limit
+        "It is your last thought.",
+        "You fall back, into a long silence.",
+        "are the last you hear.",
+        "remove a gun, and end your life.",
+    ),
+    "witness": (
+        "a two-bit shamus!",
+        "you should have taken a chair when Linder asked you to.",
+        "sooner or later.",  # arriving too late, or quitting late
+    ),
+    "zork3": ("It is the last you hear.",),  # the fourth death
+}

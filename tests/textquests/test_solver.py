@@ -8,6 +8,7 @@ from inspect_ai.model import ModelOutput, get_model
 from textquests.game_info import MAX_SCORES
 from textquests.prompts import (
     GAME_OVER_FORMAT,
+    JSON_GAME_OVER_FORMAT,
     canonical_response,
     json_canonical_response,
     json_system_prompt,
@@ -339,3 +340,67 @@ def test_walkthrough_solver() -> None:
         "steps": 82,
         "restores": 0,
     }
+
+
+def run_verified(game: str, actions: list[str]) -> TextQuestsStore:
+    from textquests.textquests import textquests_verified
+
+    outputs = [
+        ModelOutput.from_content(MOCK_MODEL, json_canonical_response("because", a))
+        for a in actions + ["look"]
+    ]
+    (log,) = eval(
+        textquests_verified(games=game),
+        model=get_model(MOCK_MODEL, custom_outputs=outputs),
+        message_limit=3 + 2 * len(actions),
+        display="none",
+        log_dir=None,
+    )
+    assert log.status == "success", log.error
+    return first_sample(log).store_as(TextQuestsStore)
+
+
+@pytest.mark.dataset_download
+def test_verified_no_game_over_prompt_after_a_death_the_game_recovers_from() -> None:
+    death = ["north", "east", "open window", "west", "west", "move rug"]
+    death += ["open trap door", "down", "north"]
+    store = run_verified("zork1", death + ["look"])
+    assert "You have died" in store.log[9].observation
+    assert not store.log[9].observation.endswith(JSON_GAME_OVER_FORMAT)
+    assert store.log[9].game_over is False
+    assert store.log[10].observation.startswith("Forest")
+
+
+@pytest.mark.dataset_download
+def test_verified_game_over_prompt_with_the_ending() -> None:
+    # Hitchhiker's Guide: stay in bed and the bulldozer demolishes the house around you
+    store = run_verified("hitchhiker", ["wait"] * 8 + ["look"])
+    assert "RESTART, RESTORE, or QUIT" in store.log[8].observation
+    assert store.log[8].observation.endswith(JSON_GAME_OVER_FORMAT)
+    assert store.log[8].game_over is True
+    assert store.log[9].observation == "Impossible." + JSON_GAME_OVER_FORMAT
+
+
+@pytest.mark.dataset_download
+def test_verified_walkthrough_solver_scores_the_final_turn() -> None:
+    from inspect_ai import Task
+
+    from textquests.scorer import textquests_scorer
+    from textquests.solver import walkthrough_solver
+    from textquests.textquests import games_dataset
+
+    # Cutthroats awards its last 70 points on the turn the game ends
+    (log,) = eval(
+        Task(
+            dataset=games_dataset("cutthroats"),
+            solver=walkthrough_solver(verified=True),
+            scorer=textquests_scorer(),
+        ),
+        model=get_model(MOCK_MODEL),
+        display="none",
+        log_dir=None,
+    )
+    assert log.status == "success"
+    value = score_value(first_sample(log))
+    assert value["points"] == 100.0
+    assert value["verified_finished"] == 1.0
