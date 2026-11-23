@@ -214,6 +214,29 @@ def test_json_output_format() -> None:
 
 
 @pytest.mark.dataset_download
+def test_verified_task_shows_package_scans_with_the_first_turn() -> None:
+    from inspect_ai.model import ContentImage
+
+    from textquests.textquests import textquests_verified
+
+    def first_user_images(game: str) -> list[str]:
+        (log,) = eval(
+            textquests_verified(games=game),
+            model=get_model(MOCK_MODEL, custom_outputs=[turn("look")] * 2),
+            message_limit=4,
+            display="none",
+        )
+        content = first_sample(log).messages[1].content
+        if isinstance(content, str):
+            return []
+        return [c.image for c in content if isinstance(c, ContentImage)]
+
+    (image,) = first_user_images("cutthroats")
+    assert image.startswith("data:image/jpeg;base64,")
+    assert first_user_images("zork1") == []
+
+
+@pytest.mark.dataset_download
 def test_game_over_prompt_appended_after_death() -> None:
     death = [
         "north",

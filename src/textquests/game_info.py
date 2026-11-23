@@ -30,6 +30,18 @@ MAX_SCORES: dict[str, int] = {
 
 GAMES = sorted(MAX_SCORES)
 
+# Items from the original package that a game cannot be finished without and that the manual
+# text given to the model leaves out. They are scans under feelies/scans in the data; the
+# Verified task shows them to the model. Sherlock needs its package newspaper (tide times),
+# which the data does not have.
+PACKAGE_SCANS = {
+    "ballyhoo": ["traveling-circus10.jpeg"],  # the radio station's frequency
+    "cutthroats": ["wrecks-map.jpeg"],  # wreck coordinates and depths
+    "infidel": ["infidel-map.jpeg"],  # where to dig
+    "lurkinghorror": ["gue6.jpeg"],  # the computer password
+    "plunderedhearts": ["fifty-guineas1.jpeg"],  # the pose that opens the portrait
+}
+
 # Actions that can hang or break the interpreter; matched case-insensitively, answered "Impossible."
 COMMON_BAD_ACTIONS = [
     "^brief.*",

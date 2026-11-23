@@ -56,6 +56,12 @@ SPECIAL ACTION: You can restore the game to previous steps by using 'restore {{s
 """
 
 
+# Not upstream: introduces the package scans the Verified task shows with the first turn
+PACKAGE_SCANS_INTRO = (
+    "The images below are from the game's original package. You may need them to play."
+)
+
+
 def observation_prompt(score: int, observation: str, step: int) -> str:
     return f"""
 STEP: {step} | CURRENT SCORE: {score}

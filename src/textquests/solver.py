@@ -6,9 +6,11 @@ Results accumulate in TextQuestsStore after every step so the scorer still has t
 sample is cut short by an Inspect limit or an error.
 """
 
+import base64
 import json
 import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Literal
 
 import anyio
@@ -18,6 +20,9 @@ from inspect_ai.model import (
     ChatMessageAssistant,
     ChatMessageSystem,
     ChatMessageUser,
+    Content,
+    ContentImage,
+    ContentText,
     Model,
     ModelOutput,
     get_model,
@@ -35,6 +40,7 @@ from textquests.env import (
 from textquests.prompts import (
     GAME_OVER_FORMAT,
     JSON_GAME_OVER_FORMAT,
+    PACKAGE_SCANS_INTRO,
     canonical_response,
     json_canonical_response,
     json_system_prompt,
@@ -127,7 +133,9 @@ def textquests_solver(
             tags, the maintained upstream harness) or "json" (a ``{"reasoning", "action"}``
             block, the original harness that produced the paper's results).
         verified: End the game on the verified 100% checkpoint, not upstream's, whose
-            string in several games also prints on a losing ending.
+            string in several games also prints on a losing ending; and show the model,
+            with the first turn, the scanned package items the game cannot be finished
+            without.
     """
     if output_format not in ("xml", "json"):
         raise ValueError(
@@ -168,11 +176,16 @@ def textquests_solver(
         for step in range(max_steps):
             if game_over:
                 observation += game_over_format
-            state.messages.append(
-                ChatMessageUser(
-                    content=observation_prompt(result.score, observation, step)
-                )
-            )
+            prompt = observation_prompt(result.score, observation, step)
+            if verified and step == 0 and env.package_scans:
+                content: list[Content] = [ContentText(text=PACKAGE_SCANS_INTRO)]
+                content += [
+                    ContentImage(image=_jpeg_data_uri(p)) for p in env.package_scans
+                ]
+                content.append(ContentText(text=prompt))
+                state.messages.append(ChatMessageUser(content=content))
+            else:
+                state.messages.append(ChatMessageUser(content=prompt))
 
             parsed = await _get_action(model, state.messages, max_retries, parse)
             if isinstance(parsed, str):
@@ -256,6 +269,10 @@ def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
         return state
 
     return solve
+
+
+def _jpeg_data_uri(path: Path) -> str:
+    return "data:image/jpeg;base64," + base64.b64encode(path.read_bytes()).decode()
 
 
 def _finished(env: TextQuestsEnv, result: StepResult, verified: bool) -> bool:

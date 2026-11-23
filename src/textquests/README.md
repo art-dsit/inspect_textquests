@@ -198,6 +198,11 @@ and 500-step budget, with the `json` output format):
 - `verified_progress` is the share of a game's verified checkpoints reached, in any order.
   These games are not linear, and the highest checkpoint says little about how much was done.
 - A game ends when its verified 100% checkpoint is reached, or at the maximum score.
+- Five games cannot be finished without an item from the original package that the manual
+  text leaves out: a map with coordinates (cutthroats, infidel), a radio frequency
+  (ballyhoo), a password (lurkinghorror), a pose on a banknote (plunderedhearts). The data
+  has these as scans, and the model is shown them as images with its first turn, so the task
+  needs a model that accepts images.
 
 `tests/textquests/verified_cases.json` holds 1,034 replay cases behind the replacements, and
 the tests check that each game's walkthrough reaches every verified checkpoint and that no
@@ -205,10 +210,8 @@ verified text can be scored by typing it. `textquests` reports `verified_progres
 
 Verified numbers are not comparable with the paper or the leaderboard. Limits that remain:
 
-- Six games need something from the original package that the agent is not given: sherlock
-  (tide times), lurkinghorror (a computer password), cutthroats and infidel (map
-  coordinates), ballyhoo (a radio frequency) and plunderedhearts (a pose on a banknote).
-  23 of the 310 checkpoints depend on these.
+- sherlock needs the tide times from its package newspaper, which the data does not have;
+  seven of its twelve checkpoints depend on them.
 - The interpreter seed is fixed, and passwords, codes and character movements are random,
   so every run plays the one world that the published walkthroughs describe.
 - The score cannot tell play from recall of these games' published solutions.

@@ -9,7 +9,7 @@ import pytest
 
 from textquests.data import load_walkthrough
 from textquests.env import MAX_ACTION_LENGTH, TextQuestsEnv
-from textquests.game_info import GAMES
+from textquests.game_info import GAMES, PACKAGE_SCANS
 from textquests.verified import DROPPED, REPLACEMENTS
 
 CASES: list[dict[str, Any]] = json.loads(
@@ -119,3 +119,10 @@ def test_file_and_mode_commands_are_blocked(
     env.step("look")
     assert env.step(action).observation == "Impossible."
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.dataset_download
+def test_package_scans_exist_in_the_data(data_dir: Path) -> None:
+    for game in PACKAGE_SCANS:
+        scans = TextQuestsEnv(data_dir / game).package_scans
+        assert scans and all(scan.is_file() for scan in scans), game

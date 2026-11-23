@@ -24,7 +24,7 @@ from typing import Any
 from jericho import FrotzEnv
 from jericho.jericho import UnsupportedGameWarning
 
-from textquests.game_info import BAD_ACTIONS, MAX_SCORES
+from textquests.game_info import BAD_ACTIONS, MAX_SCORES, PACKAGE_SCANS
 from textquests.verified import verified_strings
 
 logger = logging.getLogger(__name__)
@@ -167,6 +167,10 @@ class TextQuestsEnv:
             c["observation_string_check"].lower(): int(c["percentage"])
             for c in checkpoints
         }
+        self.package_scans = [
+            self.game_folder / "feelies" / "scans" / name
+            for name in PACKAGE_SCANS.get(self.game_name, [])
+        ]
         self.verified_checkpoints = verified_strings(
             self.game_name, self.progress_checkpoints
         )
