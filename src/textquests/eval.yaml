@@ -23,7 +23,7 @@ tasks:
 
 external_assets:
   - type: huggingface
-    source: "https://huggingface.co/datasets/justinphan3110/textquests"
+    source: "https://huggingface.co/datasets/longphann/textquests"
     fetch_method: other
     state: pinned
     comment: >

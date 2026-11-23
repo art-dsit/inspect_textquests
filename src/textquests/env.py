@@ -258,8 +258,6 @@ class TextQuestsEnv:
 
         observation, done, parsed_reward = self._pre_step(action, parse_rewards=True)
         self.state.steps += 1
-        if warning:
-            observation = warning + "\n" + observation
 
         observation, found_game_over = self._parse_game_over(observation)
         self.game_progress = max(self.game_progress, self._match_progress(observation))
@@ -281,6 +279,11 @@ class TextQuestsEnv:
         markers = self._apply_keywords(markers)
         markers = _verbs_go_last(markers)
         label_vectors = [list(self.annotations[m[0]].label_vector) for m in markers]
+
+        if warning:
+            # Added last: the warning quotes the model's own text, which must not be
+            # matched against checkpoints, markers or the game-over text
+            observation = warning + "\n" + observation
 
         return StepResult(
             observation=observation,

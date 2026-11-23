@@ -7,7 +7,7 @@ from inspect_ai.model import ModelOutput, get_model
 
 from textquests.game_info import MAX_SCORES
 from textquests.prompts import GAME_OVER_FORMAT, canonical_response
-from textquests.solver import parse_response
+from textquests.solver import parse_response, textquests_solver
 from textquests.store import TextQuestsStore
 from textquests.textquests import textquests
 
@@ -35,6 +35,13 @@ def test_parse_response() -> None:
     )
     assert parse_response("I will go north.") == ("", None)
     assert parse_response("<action>unterminated") == ("", None)
+
+
+def test_textquests_solver_validates_arguments() -> None:
+    with pytest.raises(ValueError, match="max_steps"):
+        textquests_solver(max_steps=0)
+    with pytest.raises(ValueError, match="max_retries"):
+        textquests_solver(max_retries=0)
 
 
 def turn(action: str, reasoning: str = "because") -> ModelOutput:
@@ -90,6 +97,7 @@ def test_episode_with_restore_and_restart() -> None:
         "harm": store.harm,
         "finished": 0.0,
         "context_limit": 0.0,
+        "parse_failure": 0.0,
         "steps": 8,
         "restores": 1,
     }
@@ -162,6 +170,7 @@ def test_parse_failure_retries_then_ends_episode() -> None:
     store = sample.store_as(TextQuestsStore)
     assert store.steps == 1
     assert store.ended == "parse_failure"
+    assert score_value(sample)["parse_failure"] == 1.0
     # system, user, assistant, then the user turn whose reply never parsed
     assert len(sample.messages) == 4, "failed attempts are not added to the history"
     assert score_value(sample)["steps"] == 1
@@ -226,6 +235,7 @@ def test_walkthrough_solver() -> None:
         "harm": 2,
         "finished": 1.0,
         "context_limit": 0.0,
+        "parse_failure": 0.0,
         "steps": 82,
         "restores": 0,
     }

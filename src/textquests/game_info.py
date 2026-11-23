@@ -58,7 +58,13 @@ EXTRA_BAD_ACTIONS = {
 # Not upstream: Frotz's own save/restore write and read <game>.qzl in the cwd, an uncounted rewind
 # that survives across runs. "restore N" is handled by the env before the blacklist is consulted.
 FILE_ACTIONS = [r"^save\b", r"^restore\b"]
+# Not upstream: the parser runs several commands from one line ("look. save", "look then quit"),
+# which gets these past the start-anchored patterns above
+CHAINED_ACTIONS = [r"(?:\.|\bthen\b)\s*(?:save|restore|script|unscript|quit|q)\b"]
 BAD_ACTIONS = {
-    game: EXTRA_BAD_ACTIONS.get(game, []) + COMMON_BAD_ACTIONS + FILE_ACTIONS
+    game: EXTRA_BAD_ACTIONS.get(game, [])
+    + COMMON_BAD_ACTIONS
+    + FILE_ACTIONS
+    + CHAINED_ACTIONS
     for game in GAMES
 }

@@ -18,7 +18,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 DATA_REVISION = "be34a3a9821ba2dd4eb46096a55e9062f6b6d1db"
-DATA_URL = f"https://huggingface.co/datasets/justinphan3110/textquests/resolve/{DATA_REVISION}/textquests_data.zip"
+DATA_URL = f"https://huggingface.co/datasets/longphann/textquests/resolve/{DATA_REVISION}/textquests_data.zip"
 DATA_SHA256 = "2a3c696024abe0fe61f27cb451c45413a1f43213358b169ebaeeac1f45359c04"
 
 # Top-level directory inside the zip

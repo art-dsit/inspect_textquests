@@ -100,6 +100,25 @@ class TestZork1:
         assert list(tmp_path.iterdir()) == []
         assert env.step("restore 4").observation.startswith("Kitchen")
 
+    def test_chained_file_and_quit_commands_blocked(
+        self, env: TextQuestsEnv, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        for action in ["look. save", "look then script", "look.restore", "wait. quit"]:
+            assert env.step(action).observation == "Impossible."
+        assert list(tmp_path.iterdir()) == []
+        assert env.step("look. inventory").observation != "Impossible."
+
+    def test_overlong_action_is_not_matched_against_checkpoints(
+        self, env: TextQuestsEnv
+    ) -> None:
+        checkpoints = env.progress_checkpoints
+        checkpoint = max(checkpoints, key=lambda text: checkpoints[text])
+        action = "look " + "x" * MAX_ACTION_LENGTH + " " + checkpoint
+        result = env.step(action)
+        assert checkpoint in result.observation.lower()
+        assert result.progress == 0 and env.game_progress == 0
+
 
 @pytest.mark.dataset_download
 def test_game_over_marker_blocks_actions(data_dir: Path) -> None:
