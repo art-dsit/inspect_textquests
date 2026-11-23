@@ -18,6 +18,9 @@ Included in:
   src/textquests/game_info.py  (max scores and bad-action regexes from src/game_info.py)
   src/textquests/prompts.py    (prompt text from textquests_eval.py and play_textquests.py, verbatim)
   src/textquests/solver.py     (JSON reply extraction from src/llm_agents.py)
+  tests/textquests/upstream/   (simple-evals textquests/src/textquests_env.py and
+                                game_info.py, and two functions of textquests_eval.py, at
+                                8e53435, verbatim, for tests only)
 
 ---
 

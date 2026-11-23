@@ -25,6 +25,7 @@ preset = "template"
 [tool.ruff]
 extend-exclude = [
     "agent_artefacts",
+    "tests/textquests/upstream",  # vendored verbatim from upstream
 ]
 src = ["src"]
 target-version = "py311"
@@ -90,6 +91,7 @@ markers = [
 exclude = [
     "build",
     "agent_artefacts",
+    "tests/textquests/upstream/",  # vendored verbatim from upstream
 ]
 warn_unused_ignores = true
 no_implicit_reexport = true
@@ -109,6 +111,10 @@ check_untyped_defs = true
 disallow_untyped_decorators = true
 extra_checks = true
 disable_error_code = "unused-ignore"
+
+[[tool.mypy.overrides]]
+module = ["tests.textquests.upstream.*"]
+follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = ["datasets", "datasets.*", "jericho", "jericho.*"]
