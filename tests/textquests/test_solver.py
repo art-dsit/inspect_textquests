@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 from inspect_ai import eval
-from inspect_ai.log import EvalLog, EvalSample
+from inspect_ai.log import EvalLog, EvalSample, resolve_sample_attachments
 from inspect_ai.model import ModelOutput, get_model
 
 from textquests.game_info import MAX_SCORES
@@ -226,7 +226,8 @@ def test_verified_task_shows_package_scans_with_the_first_turn() -> None:
             message_limit=4,
             display="none",
         )
-        content = first_sample(log).messages[1].content
+        sample = resolve_sample_attachments(first_sample(log), "full")
+        content = sample.messages[1].content
         if isinstance(content, str):
             return []
         return [c.image for c in content if isinstance(c, ContentImage)]
