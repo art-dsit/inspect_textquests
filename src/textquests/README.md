@@ -91,10 +91,18 @@ uv run inspect eval textquests_walkthrough
 
 Upstream runs models at high reasoning effort where available (`--reasoning-effort high`)
 and Anthropic models with a 16k thinking budget (`--reasoning-tokens 16000 --max-tokens 20000`);
-match those when comparing to the leaderboard. Run OpenAI reasoning models with
-`-M responses_api=false`: upstream calls Chat Completions, and through the Responses API,
+match those when comparing to the leaderboard. With the tag format (`output_format=xml`),
+run OpenAI reasoning models with `-M responses_api=false`: through the Responses API,
 Inspect's default for these models, GPT-5 sometimes answers with the bare word `analysis`
-and no action (see the Evaluation Report). Do not set `--message-limit`: a 500-step game is
+and no action (see the Evaluation Report). The `json` format does not have the problem.
+
+OpenAI's prompt filter sometimes refuses a turn ("Invalid prompt: your prompt was flagged
+as potentially violating our usage policy"), up to five times in a row on the same history.
+A refusal counts as an unparseable reply, so keep `max_retries` at 10 or more: at 3, GPT-5
+mini lost two games to it. In our runs it refused GPT-5 mini 50 to 70 times in about 12,500
+turns, across many of the games, GPT-5 once, and GPT-4.1 and GPT-4.1 mini not at all.
+
+Do not set `--message-limit`: a 500-step game is
 about 1000 messages. If a sample does hit an Inspect limit it is still scored on the progress
 made so far.
 
