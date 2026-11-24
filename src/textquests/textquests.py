@@ -95,9 +95,10 @@ def textquests(
     )
 
 
-# Provisional: to be settled by full runs in both formats
+# With the tag format GPT-5 loses games to replies that are only the word "analysis"
 VERIFIED_OUTPUT_FORMAT: OutputFormat = "json"
-VERIFIED_MAX_RETRIES = 3
+# The provider's prompt filter and malformed replies come in runs of several
+VERIFIED_MAX_RETRIES = 10
 
 
 @task
