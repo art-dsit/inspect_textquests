@@ -51,8 +51,8 @@ from textquests.store import StepLog, TextQuestsStore
 
 DEFAULT_MAX_STEPS = 500
 DEFAULT_SEED = 1
-# A provider's prompt filter can refuse the same history ten times running and then accept it
-VERIFIED_REFUSAL_ATTEMPTS = 30
+# Kept low: resending a prompt the provider's filter has flagged can count against the account
+VERIFIED_REFUSAL_ATTEMPTS = 2
 OutputFormat = Literal["xml", "json"]
 DEFAULT_OUTPUT_FORMAT: OutputFormat = "xml"
 # Each upstream harness's default: the maintained one (tags) 3, the original (JSON) 10

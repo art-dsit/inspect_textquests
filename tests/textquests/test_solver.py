@@ -251,8 +251,8 @@ def test_provider_refusals_have_their_own_limit_in_the_verified_task() -> None:
         sample = first_sample(log)
         return sample.store_as(TextQuestsStore), score_value(sample)
 
-    store, _ = play([refusal] * 12 + [json_look] * 3)
-    assert store.steps >= 1 and store.ended != "provider_refusal"
+    store, _ = play([refusal, json_look, refusal, json_look, json_look])
+    assert store.steps >= 2 and store.ended != "provider_refusal"
 
     store, score = play([refusal] * VERIFIED_REFUSAL_ATTEMPTS + [json_look])
     assert (store.steps, store.ended) == (0, "provider_refusal")
