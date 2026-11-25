@@ -38,6 +38,7 @@ from textquests.env import (
     game_finished,
 )
 from textquests.prompts import (
+    FICTION_NOTE,
     GAME_OVER_FORMAT,
     JSON_GAME_OVER_FORMAT,
     PACKAGE_SCANS_INTRO,
@@ -169,16 +170,15 @@ def textquests_solver(
         store.verified = verified
         env = await _make_env(state, seed, verified)
         result = env.reset()
-        state.messages = [
-            ChatMessageSystem(
-                content=make_system_prompt(
-                    game_name=env.game_name,
-                    max_score=env.max_score,
-                    guidelines=env.guidelines,
-                    invisiclues=env.invisiclues if with_clues else "",
-                )
-            )
-        ]
+        prompt = make_system_prompt(
+            game_name=env.game_name,
+            max_score=env.max_score,
+            guidelines=env.guidelines,
+            invisiclues=env.invisiclues if with_clues else "",
+        )
+        if verified:
+            prompt = f"{FICTION_NOTE}\n\n{prompt}"
+        state.messages = [ChatMessageSystem(content=prompt)]
         model = get_model()
         observation = result.observation
         game_over = False

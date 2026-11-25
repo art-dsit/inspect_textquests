@@ -104,7 +104,10 @@ refusal as an unparseable reply, as upstream does, so it uses up `max_retries` a
 is reported under `parse_failure`. `textquests_verified` counts refusals separately: it
 resends the turn, and ends the game at the tenth refusal of the same turn, reported under
 `provider_refusal`. Most refusals clear on the first resend. The cap is there because OpenAI
-warns that repeated flagged requests can lead to restrictions on the account.
+warns that repeated flagged requests can lead to restrictions on the account. Its system
+prompt also opens with a sentence saying the conversation is a playthrough of published
+interactive fiction: replaying two refused histories, that took refusals from 12 of 24 to
+1 of 24.
 
 Do not set `--message-limit`: a 500-step game is
 about 1000 messages. If a sample does hit an Inspect limit it is still scored on the progress

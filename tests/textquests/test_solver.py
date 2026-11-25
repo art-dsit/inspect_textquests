@@ -7,6 +7,7 @@ from inspect_ai.model import ModelOutput, get_model
 
 from textquests.game_info import MAX_SCORES
 from textquests.prompts import (
+    FICTION_NOTE,
     GAME_OVER_FORMAT,
     JSON_GAME_OVER_FORMAT,
     canonical_response,
@@ -286,6 +287,16 @@ def test_verified_task_shows_package_scans_with_the_first_turn() -> None:
         if isinstance(content, str):
             return []
         return [c.image for c in content if isinstance(c, ContentImage)]
+
+    (log,) = eval(
+        textquests_verified(games="zork1"),
+        model=get_model(MOCK_MODEL, custom_outputs=[turn("look")] * 2),
+        message_limit=4,
+        display="none",
+    )
+    assert first_sample(log).messages[0].text.startswith(FICTION_NOTE)
+    base = run([turn("look")], max_steps=1)
+    assert FICTION_NOTE not in first_sample(base).messages[0].text
 
     (image,) = first_user_images("cutthroats")
     assert image.startswith("data:image/jpeg;base64,")
