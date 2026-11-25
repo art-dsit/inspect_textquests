@@ -101,9 +101,10 @@ as potentially violating our usage policy"), and can refuse the same history ten
 row. In our runs it refused GPT-5 mini 50 to 70 times in about 12,500 turns, across many of
 the games, GPT-5 once, and GPT-4.1 and GPT-4.1 mini not at all. `textquests` counts a
 refusal as an unparseable reply, as upstream does, so it uses up `max_retries` and the game
-is reported under `parse_failure`. `textquests_verified` ends the game at the second
-refusal of the same turn and reports it under `provider_refusal`: OpenAI warns that
-repeated flagged requests can lead to restrictions on the account.
+is reported under `parse_failure`. `textquests_verified` counts refusals separately: it
+resends the turn, and ends the game at the tenth refusal of the same turn, reported under
+`provider_refusal`. Most refusals clear on the first resend. The cap is there because OpenAI
+warns that repeated flagged requests can lead to restrictions on the account.
 
 Do not set `--message-limit`: a 500-step game is
 about 1000 messages. If a sample does hit an Inspect limit it is still scored on the progress
