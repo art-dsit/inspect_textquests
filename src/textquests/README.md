@@ -387,56 +387,62 @@ In `textquests`:
 
 ## Evaluation Report
 
-Full leaderboard-setting runs (25 games, 500 steps, no clues), compared with Table 4 of the
-paper: the two mini models on 2026-09-28 with inspect_ai 0.3.266, GPT-4.1 and GPT-5 on
-2026-11-22 with 0.3.291. All are pinned OpenAI snapshots served via a proxy; GPT-5 mini ran at
-`--reasoning-effort high` as upstream does. Task version 1-A. The GPT-4.1 run, at commit
-`55d1238`:
+All runs are the full setting (25 games, up to 500 steps, no clues) on pinned OpenAI
+snapshots served via a proxy, with inspect_ai 0.3.291. The GPT-5 models ran at
+`--reasoning-effort high`, as upstream does. Task version 1-A.
+
+### `textquests` against the paper
+
+`output_format=json`, the format of the harness that produced the paper's results.
 
 ```bash
-uv run inspect eval textquests/textquests --model openai/gpt-4.1-2025-04-14 \
+uv run inspect eval textquests/textquests -T output_format=json \
+  --model openai/gpt-4.1-2025-04-14 \
   --max-samples 25 --max-connections 25 --no-fail-on-error
 ```
 
-`--no-fail-on-error` keeps one game's API error from cancelling the other 24. Except in
-the GPT-5 run, every game ran the full 500 steps; no game was abandoned for unparseable
-output and none hit an Inspect limit.
+| Model | Progress (paper) | Harm (paper) | Points | Wall time | Tokens |
+| --- | --- | --- | --- | --- | --- |
+| openai/gpt-5-2025-08-07, effort high | 36.8 ± 4.7 (37.8) | 17.4 ± 2.6 (17.2) | 21.7 ± 3.1 | 10h 39m | 471M in (99% cached), 25.9M out |
+| openai/gpt-4.1-2025-04-14 | 21.6 ± 4.2 (22.8) | 12.5 ± 2.2 (11.4) | 13.6 ± 2.6 | 23m | 467M in (98% cached), 0.7M out |
+| openai/gpt-5-mini-2025-08-07, effort high | 15.7 ± 3.3 (15.9) | 14.6 ± 2.8 (12.0) | 10.8 ± 1.9 | 7h 40m | 526M in (99% cached), 33.6M out |
+| openai/gpt-4.1-mini-2025-04-14 | 9.8 ± 3.3 (10.6) | 19.9 ± 5.1 (11.7) | 6.5 ± 2.0 | 40m | 442M in (98% cached), 0.7M out |
 
-| Model | Progress (paper) | Harm (paper) | Points | Restores | Wall time | Tokens |
-| --- | --- | --- | --- | --- | --- | --- |
-| openai/gpt-5-mini-2025-08-07, effort high | 21.1 ± 4.1 (15.9) | 14.3 ± 2.6 (12.0) | 13.5 ± 2.2 | 8.4 | 8h 40m | 512M in (92% cached), 35.8M out, of which 34.2M reasoning |
-| openai/gpt-5-2025-08-07, effort high, Responses API | 37.2 ± 5.1 (37.8) | 12.6 ± 1.7 (17.2) | 21.3 ± 3.2 | 5.5 | 9h 36m | 337M in (99% cached), 20.6M out, of which 19.6M reasoning |
-| openai/gpt-4.1-2025-04-14 | 22.0 ± 4.6 (22.8) | 12.3 ± 2.0 (11.4) | 13.3 ± 2.5 | 4.2 | 17m | 490M in (96% cached), 0.8M out |
-| openai/gpt-4.1-mini-2025-04-14 | 11.4 ± 3.3 (10.6) | 8.4 ± 2.1 (11.7) | 7.0 ± 1.6 | 3.1 | 17m | 448M in (98% cached), 0.7M out |
+Paper values are from its Table 4. Every game in every run played the full 500 steps.
+Progress is within a third of a standard error of the paper for all four models. Harm
+agrees for GPT-5 and GPT-4.1 and is higher than the paper for the two mini models; harm is a
+sum over the episode that a few games dominate, so one run is a noisy estimate.
 
-The paper's numbers were produced with the original harness, which asks for a JSON block
-(`{"reasoning": ..., "action": ...}`); the maintained harness and this eval ask for
-`<reasoning>`/`<action>` tags, so the comparison is across output formats.
+The GPT-4.1, GPT-4.1 mini and GPT-5 mini runs were made on 2026-11-23 at commit `af5f4df`.
+The GPT-5 run was made the same day at `462d4d1`, before the base task was brought back to
+upstream's behaviour; replaying its 12,500 logged actions through the environment at
+`af5f4df` shows the model the same text at every step, and it is scored here as the task
+scores now.
 
-**The GPT-5 row is not a clean result.** Nine of its 25 games were abandoned as
-`parse_failure` after between 74 and 441 steps (mean 414 steps over all games), so progress
-and harm are understated; that progress agrees with the paper is partly chance. In 57 of the
-71 unparseable replies (of 10,427 calls) the reply began with the word `analysis` and
-usually was nothing else, with no reasoning tokens,
-and the retry against the same history often repeated it. Replaying four of those prompts
-124 times through each API gave 15 bare `analysis` replies through the Responses API and
-none through Chat Completions. Eight other replies were refused by OpenAI's prompt filter.
-The run has not been repeated with `-M responses_api=false`.
+With the tag format (`output_format=xml`) GPT-5 lost 9 of 25 games to replies that were only
+the word `analysis`, and scored 37.2 over the games as played; GPT-5 mini scored 21.1 in a
+September run. Neither is comparable with the paper, which used the JSON format.
 
-The runs in the table were scored by earlier versions: progress matched on the raw text,
-and restores counted across restarts. Scored as `textquests` now scores them, as upstream's
-evaluation code does, the GPT-4.1 and GPT-5 runs make 20.0 ± 4.3 and 38.0 ± 5.0 progress with
-the same points and harm, 1.1 and 5.5 restores, and `verified_progress` 17.0 ± 3.4 and
-26.4 ± 4.1. The raw text had missed suspect's 35% checkpoint in both runs, and had credited
-GPT-4.1 with lurkinghorror's 70% ("bolt cutter") from an annotation marker that names the
-object, in a turn where the player is killed.
+### `textquests_verified`
 
-GPT-4.1 and GPT-4.1 mini match the paper within noise. GPT-5 mini scores 5 points higher than the paper's
-500-step number and about the same as its 800-step number (21.1); the paper gives no
-uncertainty, but our stderr of 4 over 25 games means a single run cannot distinguish a real
-gap from sampling variance. The eight games with progress 0 and the restore-heavy games
-(hitchhiker: 56 restores, no progress) are where most of the variance lives.
+```bash
+uv run inspect eval textquests/textquests_verified \
+  --model openai/gpt-4.1-2025-04-14 \
+  --max-samples 25 --max-connections 25 --no-fail-on-error
+```
 
-Smoke tests from 2026-09-21 (`max_steps` 30–40, one or two games) showed gpt-5-mini at low
-reasoning effort often omits the closing `</action>` tag; at high effort this did not happen
-once in 12,500 steps.
+| Model | Verified progress | Games finished | Points | Harm | Wall time |
+| --- | --- | --- | --- | --- | --- |
+| openai/gpt-5-2025-08-07, effort high | 27.8 ± 4.2 | 1 | 22.9 ± 3.7 | 15.4 ± 2.1 | 5h 56m |
+| openai/gpt-4.1-2025-04-14 | 18.2 ± 3.2 | 0 | 15.2 ± 2.8 | 14.1 ± 2.6 | 20m |
+| openai/gpt-5-mini-2025-08-07, effort high | 16.0 ± 3.4 | 0 | 13.7 ± 2.2 | 16.6 ± 3.8 | 6h 50m |
+| openai/gpt-4.1-mini-2025-04-14 | 9.4 ± 2.4 | 0 | 7.6 ± 1.9 | 20.5 ± 9.1 | 18m |
+
+Runs of 2026-11-25 at commit `2f791f7`. Every game played 500 steps except the one GPT-5
+finished, seastalker, in 444. No game ended on unparseable replies or provider refusals; the
+prompt filter refused GPT-5 mini 44 times, never more than three times on one turn.
+
+Earlier Verified runs of the same models, before the system prompt's opening sentence and
+with fewer retries, scored 29.6 (GPT-5), 15.7 (GPT-4.1), 8.7 (GPT-4.1 mini) and 15.2 and 18.8
+(GPT-5 mini, with three and two games cut short). The spread between repeat runs of one
+model is about the size of its standard error over games.
