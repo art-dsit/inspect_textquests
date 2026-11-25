@@ -51,6 +51,8 @@ from textquests.store import StepLog, TextQuestsStore
 
 DEFAULT_MAX_STEPS = 500
 DEFAULT_SEED = 1
+# A provider's prompt filter can refuse the same history ten times running and then accept it
+VERIFIED_REFUSAL_ATTEMPTS = 30
 OutputFormat = Literal["xml", "json"]
 DEFAULT_OUTPUT_FORMAT: OutputFormat = "xml"
 # Each upstream harness's default: the maintained one (tags) 3, the original (JSON) 10
@@ -194,7 +196,13 @@ def textquests_solver(
             else:
                 state.messages.append(ChatMessageUser(content=prompt))
 
-            parsed = await _get_action(model, state.messages, attempts, parse)
+            parsed = await _get_action(
+                model,
+                state.messages,
+                attempts,
+                parse,
+                refusal_attempts=VERIFIED_REFUSAL_ATTEMPTS if verified else 0,
+            )
             if isinstance(parsed, str):
                 store.ended = parsed
                 break
@@ -315,12 +323,16 @@ async def _get_action(
     messages: list[ChatMessage],
     max_retries: int,
     parse: Callable[[str], tuple[Any, str | None]],
+    refusal_attempts: int = 0,
 ) -> tuple[Any, str, ModelOutput] | str:
     """Generate against the unchanged history until the reply contains an action.
 
-    Returns the parsed reply, or the reason the episode has to end.
+    Returns the parsed reply, or the reason the episode has to end. With
+    ``refusal_attempts``, a reply the provider's content filter refused is not counted
+    against ``max_retries`` but against that limit.
     """
-    for attempt in range(1, max_retries + 1):
+    attempt = refusals = 0
+    while attempt < max_retries:
         output = await model.generate(messages)
         reasoning, action = parse(output.completion)
         if action is not None:
@@ -328,6 +340,16 @@ async def _get_action(
         if output.stop_reason == "model_length":
             transcript().info("History no longer fits the model's context window.")
             return "context_limit"
+        if refusal_attempts and output.stop_reason == "content_filter":
+            refusals += 1
+            transcript().info(
+                f"The provider refused the prompt ({refusals}/{refusal_attempts}): "
+                f"{output.completion[:200]!r}"
+            )
+            if refusals == refusal_attempts:
+                return "provider_refusal"
+            continue
+        attempt += 1
         transcript().info(
             f"No action in model output (attempt {attempt}/{max_retries}): "
             f"{output.completion[:200]!r}"

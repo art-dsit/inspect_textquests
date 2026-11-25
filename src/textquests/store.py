@@ -31,7 +31,7 @@ class TextQuestsStore(StoreModel):
     verified_total: int = 0
     restores: int = 0
     restarts: int = 0
-    # "finished", "max_steps", "parse_failure", "context_limit", "walkthrough_exhausted",
-    # or "" if interrupted
+    # "finished", "max_steps", "parse_failure", "provider_refusal", "context_limit",
+    # "walkthrough_exhausted", or "" if interrupted
     ended: str = ""
     log: list[StepLog] = Field(default_factory=list)

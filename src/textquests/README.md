@@ -97,10 +97,12 @@ Inspect's default for these models, GPT-5 sometimes answers with the bare word `
 and no action (see the Evaluation Report). The `json` format does not have the problem.
 
 OpenAI's prompt filter sometimes refuses a turn ("Invalid prompt: your prompt was flagged
-as potentially violating our usage policy"), up to five times in a row on the same history.
-A refusal counts as an unparseable reply, so keep `max_retries` at 10 or more: at 3, GPT-5
-mini lost two games to it. In our runs it refused GPT-5 mini 50 to 70 times in about 12,500
-turns, across many of the games, GPT-5 once, and GPT-4.1 and GPT-4.1 mini not at all.
+as potentially violating our usage policy"), and can refuse the same history ten times in a
+row. In our runs it refused GPT-5 mini 50 to 70 times in about 12,500 turns, across many of
+the games, GPT-5 once, and GPT-4.1 and GPT-4.1 mini not at all. `textquests` counts a
+refusal as an unparseable reply, as upstream does, so it uses up `max_retries` and the game
+is reported under `parse_failure`. `textquests_verified` gives refusals their own limit of
+30 and reports a game they end under `provider_refusal`.
 
 Do not set `--message-limit`: a 500-step game is
 about 1000 messages. If a sample does hit an Inspect limit it is still scored on the progress
@@ -176,6 +178,7 @@ annotations the model was shown each turn, so the result of the last action is n
 | `finished` | 1 if progress reached 100 (in `textquests_verified`: or the in-game score reached its maximum). |
 | `context_limit` | 1 if the game stopped because the history outgrew the model's context window. Its other metrics cover only the steps played. |
 | `parse_failure` | 1 if the game was abandoned after `max_retries` replies in a row without a parseable action. Its other metrics cover only the steps played. |
+| `provider_refusal` | 1 if the game was abandoned because the provider's content filter kept refusing the prompt (`textquests_verified` only). |
 | `steps`, `restores` | Turns played, and `restore N` commands honoured since the last restart (in `textquests_verified`, in the whole episode). |
 
 The per-step log (observation, action, reasoning, score, label vectors) is kept in the

@@ -154,6 +154,7 @@ def test_episode_with_restore_and_restart() -> None:
         "verified_finished": 0.0,
         "context_limit": 0.0,
         "parse_failure": 0.0,
+        "provider_refusal": 0.0,
         "steps": 8,
         "restores": 0,
     }
@@ -226,6 +227,45 @@ def test_json_output_format() -> None:
     assert sample.messages[2].text == json_canonical_response("because", "north")
     assert [entry.action for entry in store.log] == ["north", "east"]
     assert store.ended == "max_steps", "the tagged reply was retried, not accepted"
+
+
+@pytest.mark.dataset_download
+def test_provider_refusals_have_their_own_limit_in_the_verified_task() -> None:
+    from textquests.solver import VERIFIED_REFUSAL_ATTEMPTS
+    from textquests.textquests import textquests_verified
+
+    refusal = ModelOutput.from_content(
+        MOCK_MODEL, "Invalid prompt: flagged", stop_reason="content_filter"
+    )
+    json_look = ModelOutput.from_content(
+        MOCK_MODEL, '```json\n{"reasoning": "r", "action": "look"}\n```'
+    )
+
+    def play(outputs: list[ModelOutput]) -> tuple[TextQuestsStore, dict[str, Any]]:
+        (log,) = eval(
+            textquests_verified(games="zork1"),
+            model=get_model(MOCK_MODEL, custom_outputs=outputs),
+            message_limit=6,
+            display="none",
+        )
+        sample = first_sample(log)
+        return sample.store_as(TextQuestsStore), score_value(sample)
+
+    store, _ = play([refusal] * 12 + [json_look] * 3)
+    assert store.steps >= 1 and store.ended != "provider_refusal"
+
+    store, score = play([refusal] * VERIFIED_REFUSAL_ATTEMPTS + [json_look])
+    assert (store.steps, store.ended) == (0, "provider_refusal")
+    assert (score["provider_refusal"], score["parse_failure"]) == (1.0, 0.0)
+
+
+@pytest.mark.dataset_download
+def test_provider_refusals_count_as_failed_attempts_in_the_base_task() -> None:
+    refusal = ModelOutput.from_content(
+        MOCK_MODEL, "Invalid prompt: flagged", stop_reason="content_filter"
+    )
+    log = run([refusal] * 3 + [turn("look")], max_steps=2, max_retries=3)
+    assert first_sample(log).store_as(TextQuestsStore).ended == "parse_failure"
 
 
 @pytest.mark.dataset_download
@@ -363,6 +403,7 @@ def test_walkthrough_solver() -> None:
         "verified_finished": 1.0,
         "context_limit": 0.0,
         "parse_failure": 0.0,
+        "provider_refusal": 0.0,
         "steps": 82,
         "restores": 0,
     }

@@ -62,6 +62,7 @@ def upstream_metrics(game: str, log: list[StepLog]) -> tuple[int, int, int]:
             "verified_finished": [mean()],
             "context_limit": [mean()],
             "parse_failure": [mean()],
+            "provider_refusal": [mean()],
             "steps": [mean()],
             "restores": [mean()],
         }
@@ -94,6 +95,7 @@ def textquests_scorer() -> Scorer:
                 ),
                 "context_limit": 1.0 if store.ended == "context_limit" else 0.0,
                 "parse_failure": 1.0 if store.ended == "parse_failure" else 0.0,
+                "provider_refusal": (1.0 if store.ended == "provider_refusal" else 0.0),
                 "steps": store.steps,
                 "restores": store.restores,
             },
