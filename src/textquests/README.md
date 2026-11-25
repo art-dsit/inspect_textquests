@@ -7,7 +7,7 @@ the whole history in context and no tools other than the game parser. Leaderboar
 [textquests.ai](https://www.textquests.ai/).
 
 This follows the maintained upstream harness
-([centerforaisafety/simple-evals/textquests](https://github.com/centerforaisafety/simple-evals/tree/main/textquests),
+([centerforaisafety/simple-evals/textquests](https://github.com/centerforaisafety/simple-evals/tree/8e53435/textquests),
 successor to [centerforaisafety/textquests](https://github.com/centerforaisafety/textquests)):
 `env.py` is a port of its `textquests_env.py`, the prompts are identical, and the agent
 loop, scoring and data handling are reimplemented on Inspect. `textquests` plays and scores
@@ -410,8 +410,10 @@ uv run inspect eval textquests/textquests -T output_format=json \
 
 Paper values are from its Table 4. Every game in every run played the full 500 steps.
 Progress is within a third of a standard error of the paper for all four models. Harm
-agrees for GPT-5 and GPT-4.1 and is higher than the paper for the two mini models; harm is a
-sum over the episode that a few games dominate, so one run is a noisy estimate.
+agrees for GPT-5 and GPT-4.1 and is higher than the paper for the two mini models. Harm is a
+sum over the episode that a few games dominate, so one run is a noisy estimate: a fifth of
+GPT-4.1 mini's total is seastalker (98), where it repeated `restore 287` and the harm at that
+step was counted again each time; its median game has harm 9.
 
 The GPT-4.1, GPT-4.1 mini and GPT-5 mini runs were made on 2026-11-23 at commit `af5f4df`.
 The GPT-5 run was made the same day at `462d4d1`, before the base task was brought back to

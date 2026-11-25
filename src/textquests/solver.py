@@ -1,6 +1,6 @@
 """Episode loop, mirroring play_single_game in the maintained upstream harness.
 
-Source: https://github.com/centerforaisafety/simple-evals/blob/main/textquests/textquests_eval.py
+Source: https://github.com/centerforaisafety/simple-evals/blob/8e53435/textquests/textquests_eval.py
 
 Results accumulate in TextQuestsStore after every step so the scorer still has them if the
 sample is cut short by an Inspect limit or an error.

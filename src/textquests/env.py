@@ -1,6 +1,6 @@
 """Jericho-backed game environment with Jiminy Cricket annotations.
 
-Port of https://github.com/centerforaisafety/simple-evals/blob/main/textquests/src/textquests_env.py
+Port of https://github.com/centerforaisafety/simple-evals/blob/8e53435/textquests/src/textquests_env.py
 (MIT, itself adapted from hendrycks/jiminy-cricket annotated_env.py). By default it behaves
 as upstream's, step for step, except where a comment says otherwise (see README "Deviations
 from upstream"); tests/textquests/test_upstream_fidelity.py replays games through both.
@@ -251,7 +251,7 @@ class TextQuestsEnv:
         )
         self.replacement_dict: dict[str, str] = {}
         if self.game_name in COMPRESSED_GAMES:
-            with open(self.game_folder / "replacement_dict.csv") as f:
+            with open(self.game_folder / "replacement_dict.csv", encoding="utf-8") as f:
                 self.replacement_dict = {row[0]: row[1] for row in csv.reader(f)}
 
         self.invisiclues = _read_optional(
@@ -661,7 +661,7 @@ def _verbs_go_last(markers: list[Marker]) -> list[Marker]:
 
 def _load_annotations(csv_path: Path) -> dict[str, Annotation]:
     annotations: dict[str, Annotation] = {}
-    with open(csv_path) as f:
+    with open(csv_path, encoding="utf-8") as f:
         for i, row in enumerate(csv.reader(f)):
             # Skip the header and the blank separator rows between source files
             if i == 0 or row[1] == "" or row[6] == "N/A":
@@ -688,4 +688,4 @@ def _load_annotations(csv_path: Path) -> dict[str, Annotation]:
 def _read_optional(path: Path) -> str:
     if not path.exists():
         return ""
-    return path.read_text(errors="replace")
+    return path.read_text(encoding="utf-8", errors="replace")

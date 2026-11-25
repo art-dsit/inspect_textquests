@@ -1,7 +1,7 @@
 """Prompt text, identical to upstream's two harnesses.
 
 "xml": the maintained harness,
-https://github.com/centerforaisafety/simple-evals/blob/main/textquests/textquests_eval.py
+https://github.com/centerforaisafety/simple-evals/blob/8e53435/textquests/textquests_eval.py
 (get_system_prompt, get_observation_prompt and the game-over block in play_single_game).
 
 "json": the original harness, which produced the paper's results,

@@ -3,7 +3,7 @@
 Long Phan, Mantas Mazeika, Andy Zou, Dan Hendrycks. https://arxiv.org/abs/2507.23701
 
 Follows the maintained upstream harness at
-https://github.com/centerforaisafety/simple-evals/tree/main/textquests.
+https://github.com/centerforaisafety/simple-evals/tree/8e53435/textquests.
 """
 
 from inspect_ai import Task, task

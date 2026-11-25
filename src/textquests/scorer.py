@@ -1,7 +1,7 @@
 """Upstream's three metrics (Progress, Points, Harm) plus diagnostics, per game then averaged.
 
 In the base task they are computed as upstream's evaluate_results computes them, from the
-per-step log: https://github.com/centerforaisafety/simple-evals/blob/main/textquests/textquests_eval.py
+per-step log: https://github.com/centerforaisafety/simple-evals/blob/8e53435/textquests/textquests_eval.py
 In verified mode they come from every step's result, including the last.
 """
 
@@ -21,7 +21,9 @@ from textquests.store import StepLog, TextQuestsStore
 
 @cache
 def _checkpoint_strings(progress_file: Path, game: str) -> list[tuple[str, int]]:
-    checkpoints = json.loads(progress_file.read_text())[game]["checkpoints"]
+    checkpoints = json.loads(progress_file.read_text(encoding="utf-8"))[game][
+        "checkpoints"
+    ]
     return [
         (c["observation_string_check"].lower(), int(c["percentage"]))
         for c in checkpoints

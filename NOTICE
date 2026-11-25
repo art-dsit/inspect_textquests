@@ -11,7 +11,7 @@ TextQuests
 Copyright 2025 centerforaisafety
 License: MIT
 Source: https://github.com/centerforaisafety/textquests
-        https://github.com/centerforaisafety/simple-evals/tree/main/textquests
+        https://github.com/centerforaisafety/simple-evals/tree/8e53435/textquests
 
 Included in:
   src/textquests/env.py        (port of src/textquests_env.py)
