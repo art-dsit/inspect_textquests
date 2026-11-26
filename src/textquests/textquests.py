@@ -95,6 +95,47 @@ def textquests(
     )
 
 
+# With the tag format GPT-5 loses games to replies that are only the word "analysis"
+VERIFIED_OUTPUT_FORMAT: OutputFormat = "json"
+# The provider's prompt filter and malformed replies come in runs of several
+VERIFIED_MAX_RETRIES = 10
+
+
+# Left out: sherlock needs tide times from its package newspaper, which the data does not have
+VERIFIED_GAMES = [game for game in GAMES if game != "sherlock"]
+
+
+@task
+def textquests_verified(games: str | list[str] | None = None) -> Task:
+    """TextQuests Verified: the benchmark with corrected progress scoring.
+
+    Same prompts, environment and 500-step budget as `textquests`, with the settings fixed,
+    on 24 of its 25 games (not sherlock). The headline metric is `verified_progress`: the share of each game's audited
+    checkpoints reached, in any order (see textquests/verified.py). A game ends on its
+    verified 100% checkpoint. Not comparable with the paper or leaderboard.
+
+    Args:
+        games: Game name or list of game names to run; all 24 by default.
+    """
+    selected = VERIFIED_GAMES if games is None else games
+    excluded = {"sherlock"} & (
+        {selected} if isinstance(selected, str) else set(selected)
+    )
+    if excluded:
+        raise ValueError("sherlock is not part of TextQuests Verified")
+    return Task(
+        dataset=games_dataset(selected),
+        solver=textquests_solver(
+            output_format=VERIFIED_OUTPUT_FORMAT,
+            max_retries=VERIFIED_MAX_RETRIES,
+            verified=True,
+        ),
+        scorer=textquests_scorer(),
+        version=EVAL_VERSION,
+        metadata={"output_format": VERIFIED_OUTPUT_FORMAT},
+    )
+
+
 @task
 def textquests_walkthrough(
     games: str | list[str] | None = None,

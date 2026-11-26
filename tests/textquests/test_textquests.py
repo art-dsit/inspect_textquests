@@ -6,6 +6,7 @@ from textquests.textquests import (
     EVAL_VERSION,
     games_dataset,
     textquests,
+    textquests_verified,
     textquests_walkthrough,
 )
 
@@ -33,6 +34,12 @@ def test_task_construction(monkeypatch: pytest.MonkeyPatch) -> None:
         "output_format": "xml",
     }
     assert len(textquests_walkthrough(games="zork1").dataset) == 1
+    assert len(textquests_verified().dataset) == 24
+    with pytest.raises(ValueError, match="sherlock"):
+        textquests_verified(games=["zork1", "sherlock"])
+    verified = textquests_verified(games="zork1")
+    assert len(verified.dataset) == 1
+    assert verified.metadata == {"output_format": "json"}
     with pytest.raises(ValueError, match="max_steps"):
         textquests(max_steps=0)
     with pytest.raises(ValueError, match="max_retries"):
