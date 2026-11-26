@@ -142,7 +142,7 @@ See `uv run inspect eval --help` for all available options.
 
 ### `textquests_verified`
 
-- `games` (str | list[str] | None): Game name or list of game names to run; all 25 by default. (default: `None`)
+- `games` (str | list[str] | None): Game name or list of game names to run; all 24 by default. (default: `None`)
 
 ### `textquests_walkthrough`
 
@@ -200,7 +200,7 @@ uv run inspect eval textquests/textquests_verified --model openai/gpt-5-nano
 Upstream scores progress as the highest checkpoint whose text appeared in the game's output.
 We audited all 327 checkpoints against the games' source code and by replay, following
 [Epoch AI's review](https://epoch.ai/benchmarks/textquests/review) of the benchmark, which
-found errors in 74 of them. 116 are wrong:
+found errors in 74 of them. 117 are wrong:
 
 - the text also prints for a wrong action or a losing ending. The "100%" text of cutthroats,
   sorcerer, plunderedhearts, planetfall and trinity appears in endings where the player dies
@@ -210,11 +210,15 @@ found errors in 74 of them. 116 are wrong:
 - seven can be scored on the first move by typing the checkpoint's own words, which the
   parser quotes back ("You can't see any bolt cutter here").
 
-The Verified task changes these things and nothing else (same games, prompts and 500-step
-budget, with the `json` output format and 3 attempts at a parseable reply):
+The Verified task changes these things and nothing else (same prompts and 500-step budget,
+with the `json` output format and 10 attempts at a parseable reply):
 
-- 107 checkpoints use replacement text, 9 that no text can decide are left out, and so are
-  the eight 0% "game has started" ones. That leaves 310. The list is in `verified.py`.
+- 106 checkpoints use replacement text, two are sound once `look. superbrief` is refused,
+  9 that no text can decide are left out, and so are the eight 0% "game has started" ones.
+  That leaves 310. The list is in `verified.py`.
+- sherlock is not played. It cannot be taken past its 55% checkpoint without the tide times
+  printed in its package newspaper, which the data does not have. The task plays the other
+  24 games, with 298 checkpoints between them.
 - `verified_progress` is the share of a game's verified checkpoints reached, in any order.
   These games are not linear, and the highest checkpoint says little about how much was done.
 - A game ends when the game itself ends after its verified 100% checkpoint, or at the
@@ -261,8 +265,6 @@ environment reach every verified checkpoint and the maximum score. `textquests` 
 
 Verified numbers are not comparable with the paper or the leaderboard. Limits that remain:
 
-- sherlock needs the tide times from its package newspaper, which the data does not have;
-  seven of its twelve checkpoints depend on them.
 - The interpreter seed is fixed, and passwords, codes and character movements are random,
   so every run plays the one world that the published walkthroughs describe.
 - The score cannot tell play from recall of these games' published solutions.
@@ -447,16 +449,18 @@ uv run inspect eval textquests/textquests_verified \
 
 | Model | Verified progress | Games finished | Points | Harm | Wall time |
 | --- | --- | --- | --- | --- | --- |
-| openai/gpt-5-2025-08-07, effort high | 27.8 ± 4.2 | 1 | 22.9 ± 3.7 | 15.4 ± 2.1 | 5h 56m |
-| openai/gpt-4.1-2025-04-14 | 18.2 ± 3.2 | 0 | 15.2 ± 2.8 | 14.1 ± 2.6 | 20m |
-| openai/gpt-5-mini-2025-08-07, effort high | 16.0 ± 3.4 | 0 | 13.7 ± 2.2 | 16.6 ± 3.8 | 6h 50m |
-| openai/gpt-4.1-mini-2025-04-14 | 9.4 ± 2.4 | 0 | 7.6 ± 1.9 | 20.5 ± 9.1 | 18m |
+| openai/gpt-5-2025-08-07, effort high | 28.6 ± 4.3 | 1 | 23.3 ± 3.8 | 15.2 ± 2.2 | 5h 56m |
+| openai/gpt-4.1-2025-04-14 | 18.6 ± 3.3 | 0 | 15.2 ± 2.9 | 14.3 ± 2.7 | 20m |
+| openai/gpt-5-mini-2025-08-07, effort high | 16.3 ± 3.6 | 0 | 13.8 ± 2.3 | 16.9 ± 3.9 | 6h 50m |
+| openai/gpt-4.1-mini-2025-04-14 | 9.8 ± 2.5 | 0 | 7.9 ± 2.0 | 19.9 ± 9.4 | 18m |
 
-Runs of 2026-11-25 at commit `2f791f7`. Every game played 500 steps except the one GPT-5
-finished, seastalker, in 444. No game ended on unparseable replies or provider refusals; the
-prompt filter refused GPT-5 mini 44 times, never more than three times on one turn.
+Runs of 2026-11-25 at commit `2f791f7`, which still played sherlock; the table is over the
+other 24 games, and the wall times are for all 25. Every game played 500 steps except the
+one GPT-5 finished, seastalker, in 444. No game ended on unparseable replies or provider
+refusals; the prompt filter refused GPT-5 mini 44 times, never more than three times on one
+turn.
 
-Earlier Verified runs of the same models, before the system prompt's opening sentence and
-with fewer retries, scored 29.6 (GPT-5), 15.7 (GPT-4.1), 8.7 (GPT-4.1 mini) and 15.2 and 18.8
-(GPT-5 mini, with three and two games cut short). The spread between repeat runs of one
+Earlier Verified runs of the same models over all 25 games, before the system prompt's
+opening sentence and with fewer retries, scored 29.6 (GPT-5), 15.7 (GPT-4.1), 8.7 (GPT-4.1
+mini) and 15.2 and 18.8 (GPT-5 mini, with three and two games cut short). The spread between repeat runs of one
 model is about the size of its standard error over games.

@@ -19,7 +19,7 @@ tasks:
   - name: textquests
     dataset_samples: 25
   - name: textquests_verified
-    dataset_samples: 25
+    dataset_samples: 24
   - name: textquests_walkthrough
     dataset_samples: 25
 
