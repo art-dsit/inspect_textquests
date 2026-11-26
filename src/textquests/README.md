@@ -287,6 +287,17 @@ These are upstream's, and kept so that the numbers stay comparable:
   `quit.` and `q ` reach the interpreter, and `hint` opens the hint menus of sherlock and
   borderzone, which cannot be left.
 
+## Licence
+
+This evaluation is under the GNU General Public License, version 2 or later, because it
+imports [Jericho](https://github.com/microsoft/jericho), which is. The code ported from
+the upstream harness is MIT-licensed; `NOTICE` at the repository root lists it.
+
+The game data is not part of this repository and is not covered by its licence. It is
+downloaded when the eval first runs, from a third-party Hugging Face dataset that does not
+state a licence. It contains Infocom's games, manuals and hint booklets as recompiled by the
+Jiminy Cricket project. Logs of this eval reproduce game text.
+
 ## Evaluation Report
 
 All runs are the full setting (25 games, up to 500 steps, no clues) on pinned OpenAI
