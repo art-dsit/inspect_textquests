@@ -297,8 +297,9 @@ it:
   of the games. Upstream lets all of these through. In the GPT-4.1 run below, zork3 and
   seastalker typed `save` and borderzone a bare `restore`.
 - **Annotation faults that crash upstream's episode are tolerated**: the `-visited` filter,
-  which raises `NameError` in upstream, fires once the referenced location has been visited,
-  as the annotation file says (two zork2 annotations use it); a marker whose annotation has
+  which raises `NameError` in upstream when one of the two zork2 annotations that use it
+  fires, is evaluated without error (those two annotations still do not count: the game does
+  not print the marker they depend on); a marker whose annotation has
   no moral label, or a `taken` marker with no object, is ignored; a status line whose Moves
   field is not a number is read for its score. None of these came up in the runs below.
 - **The model's reply** is parsed and written back into the history as upstream does, but
@@ -433,7 +434,7 @@ upstream's behaviour; replaying its 12,500 logged actions through the environmen
 scores now.
 
 With the tag format (`output_format=xml`) GPT-5 lost 9 of 25 games to replies that were only
-the word `analysis`, and scored 37.2 over the games as played; GPT-5 mini scored 21.1 in a
+the word `analysis`, and scored 38.0 over the games as played; GPT-5 mini scored 21.1 in a
 September run. Neither is comparable with the paper, which used the JSON format.
 
 ### `textquests_verified`
