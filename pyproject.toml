@@ -132,7 +132,7 @@ description = "Inspect AI implementation of the TextQuests benchmark (25 Infocom
 authors = [{ name = "Art O Cathain" }]
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
+license = "GPL-2.0-or-later"
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 3 - Alpha",
