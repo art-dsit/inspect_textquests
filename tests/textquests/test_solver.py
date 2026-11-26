@@ -2,14 +2,12 @@ from typing import Any
 
 import pytest
 from inspect_ai import eval
-from inspect_ai.log import EvalLog, EvalSample, resolve_sample_attachments
+from inspect_ai.log import EvalLog, EvalSample
 from inspect_ai.model import ModelOutput, get_model
 
 from textquests.game_info import MAX_SCORES
 from textquests.prompts import (
-    FICTION_NOTE,
     GAME_OVER_FORMAT,
-    JSON_GAME_OVER_FORMAT,
     canonical_response,
     json_canonical_response,
     json_system_prompt,
@@ -143,19 +141,16 @@ def test_episode_with_restore_and_restart() -> None:
 
     assert store.steps == len(actions)
     assert store.ended == "max_steps"
-    assert store.progress == 5 and store.max_score == 10
+    harm = sum(lv[0] for entry in store.log for lv in entry.label_vectors)
     # Upstream zeroes the restore count on restart
     assert store.restores == 0 and store.restarts == 1
     assert score_value(sample) == {
         "progress": 5,
-        "verified_progress": 100 * 1 / 13,
         "points": 100 * 10 / MAX_SCORES["zork1"],
-        "harm": store.harm,
+        "harm": harm,
         "finished": 0.0,
-        "verified_finished": 0.0,
         "context_limit": 0.0,
         "parse_failure": 0.0,
-        "provider_refusal": 0.0,
         "steps": 8,
         "restores": 0,
     }
@@ -186,7 +181,7 @@ def test_episode_with_restore_and_restart() -> None:
     results = {s.name: s for s in log.results.scores}
     assert results["progress"].scorer == "textquests_scorer"
     assert results["progress"].metrics["mean"].value == 5
-    assert results["harm"].metrics["mean"].value == store.harm
+    assert results["harm"].metrics["mean"].value == harm
 
 
 @pytest.mark.dataset_download
@@ -194,12 +189,8 @@ def test_result_of_the_last_action_is_not_scored() -> None:
     # As upstream: metrics come from the log, which holds the state before each action.
     # The fourth action reaches the Kitchen, zork1's first checkpoint and first points.
     log = run([turn(a) for a in ["north", "east", "open window", "west"]], max_steps=4)
-    sample = first_sample(log)
-    store = sample.store_as(TextQuestsStore)
-    assert (store.progress, store.max_score) == (5, 10), "live values"
-    value = score_value(sample)
+    value = score_value(first_sample(log))
     assert (value["progress"], value["points"]) == (0, 0.0)
-    assert value["verified_progress"] == 100 * 1 / 13
 
 
 @pytest.mark.dataset_download
@@ -231,76 +222,12 @@ def test_json_output_format() -> None:
 
 
 @pytest.mark.dataset_download
-def test_provider_refusals_have_their_own_limit_in_the_verified_task() -> None:
-    from textquests.solver import VERIFIED_REFUSAL_ATTEMPTS
-    from textquests.textquests import textquests_verified
-
-    refusal = ModelOutput.from_content(
-        MOCK_MODEL, "Invalid prompt: flagged", stop_reason="content_filter"
-    )
-    json_look = ModelOutput.from_content(
-        MOCK_MODEL, '```json\n{"reasoning": "r", "action": "look"}\n```'
-    )
-
-    def play(outputs: list[ModelOutput]) -> tuple[TextQuestsStore, dict[str, Any]]:
-        (log,) = eval(
-            textquests_verified(games="zork1"),
-            model=get_model(MOCK_MODEL, custom_outputs=outputs),
-            message_limit=6,
-            display="none",
-        )
-        sample = first_sample(log)
-        return sample.store_as(TextQuestsStore), score_value(sample)
-
-    store, _ = play([refusal, json_look, refusal, json_look, json_look])
-    assert store.steps >= 2 and store.ended != "provider_refusal"
-
-    store, score = play([refusal] * VERIFIED_REFUSAL_ATTEMPTS + [json_look])
-    assert (store.steps, store.ended) == (0, "provider_refusal")
-    assert (score["provider_refusal"], score["parse_failure"]) == (1.0, 0.0)
-
-
-@pytest.mark.dataset_download
-def test_provider_refusals_count_as_failed_attempts_in_the_base_task() -> None:
+def test_provider_refusals_count_as_failed_attempts() -> None:
     refusal = ModelOutput.from_content(
         MOCK_MODEL, "Invalid prompt: flagged", stop_reason="content_filter"
     )
     log = run([refusal] * 3 + [turn("look")], max_steps=2, max_retries=3)
     assert first_sample(log).store_as(TextQuestsStore).ended == "parse_failure"
-
-
-@pytest.mark.dataset_download
-def test_verified_task_shows_package_scans_with_the_first_turn() -> None:
-    from inspect_ai.model import ContentImage
-
-    from textquests.textquests import textquests_verified
-
-    def first_user_images(game: str) -> list[str]:
-        (log,) = eval(
-            textquests_verified(games=game),
-            model=get_model(MOCK_MODEL, custom_outputs=[turn("look")] * 2),
-            message_limit=4,
-            display="none",
-        )
-        sample = resolve_sample_attachments(first_sample(log), "full")
-        content = sample.messages[1].content
-        if isinstance(content, str):
-            return []
-        return [c.image for c in content if isinstance(c, ContentImage)]
-
-    (log,) = eval(
-        textquests_verified(games="zork1"),
-        model=get_model(MOCK_MODEL, custom_outputs=[turn("look")] * 2),
-        message_limit=4,
-        display="none",
-    )
-    assert first_sample(log).messages[0].text.startswith(FICTION_NOTE)
-    base = run([turn("look")], max_steps=1)
-    assert FICTION_NOTE not in first_sample(base).messages[0].text
-
-    (image,) = first_user_images("cutthroats")
-    assert image.startswith("data:image/jpeg;base64,")
-    assert first_user_images("zork1") == []
 
 
 @pytest.mark.dataset_download
@@ -317,11 +244,14 @@ def test_game_over_prompt_appended_after_death() -> None:
         "north",
     ]
     log = run([turn(a) for a in death + ["restore 8"]], max_steps=len(death) + 1)
-    store = first_sample(log).store_as(TextQuestsStore)
+    sample = first_sample(log)
+    store = sample.store_as(TextQuestsStore)
     assert "You have died" in store.log[9].observation
     assert store.log[9].observation.endswith(GAME_OVER_FORMAT)
     assert store.log[9].game_over is True
-    assert store.max_score == 35, "max score is kept even though death costs points"
+    assert score_value(sample)["points"] == 100 * 35 / MAX_SCORES["zork1"], (
+        "max score is kept even though death costs points"
+    )
 
 
 @pytest.mark.dataset_download
@@ -407,78 +337,11 @@ def test_walkthrough_solver() -> None:
     assert log.status == "success"
     assert score_value(first_sample(log)) == {
         "progress": 100,
-        "verified_progress": 100.0,
         "points": 100.0,
         "harm": 2,
         "finished": 1.0,
-        "verified_finished": 1.0,
         "context_limit": 0.0,
         "parse_failure": 0.0,
-        "provider_refusal": 0.0,
         "steps": 82,
         "restores": 0,
     }
-
-
-def run_verified(game: str, actions: list[str]) -> TextQuestsStore:
-    from textquests.textquests import textquests_verified
-
-    outputs = [
-        ModelOutput.from_content(MOCK_MODEL, json_canonical_response("because", a))
-        for a in actions + ["look"]
-    ]
-    (log,) = eval(
-        textquests_verified(games=game),
-        model=get_model(MOCK_MODEL, custom_outputs=outputs),
-        message_limit=3 + 2 * len(actions),
-        display="none",
-        log_dir=None,
-    )
-    assert log.status == "success", log.error
-    return first_sample(log).store_as(TextQuestsStore)
-
-
-@pytest.mark.dataset_download
-def test_verified_no_game_over_prompt_after_a_death_the_game_recovers_from() -> None:
-    death = ["north", "east", "open window", "west", "west", "move rug"]
-    death += ["open trap door", "down", "north"]
-    store = run_verified("zork1", death + ["look"])
-    assert "You have died" in store.log[9].observation
-    assert not store.log[9].observation.endswith(JSON_GAME_OVER_FORMAT)
-    assert store.log[9].game_over is False
-    assert store.log[10].observation.startswith("Forest")
-
-
-@pytest.mark.dataset_download
-def test_verified_game_over_prompt_with_the_ending() -> None:
-    # Hitchhiker's Guide: stay in bed and the bulldozer demolishes the house around you
-    store = run_verified("hitchhiker", ["wait"] * 8 + ["look"])
-    assert "RESTART, RESTORE, or QUIT" in store.log[8].observation
-    assert store.log[8].observation.endswith(JSON_GAME_OVER_FORMAT)
-    assert store.log[8].game_over is True
-    assert store.log[9].observation == "Impossible." + JSON_GAME_OVER_FORMAT
-
-
-@pytest.mark.dataset_download
-def test_verified_walkthrough_solver_scores_the_final_turn() -> None:
-    from inspect_ai import Task
-
-    from textquests.scorer import textquests_scorer
-    from textquests.solver import walkthrough_solver
-    from textquests.textquests import games_dataset
-
-    # Cutthroats awards its last 70 points on the turn the game ends
-    (log,) = eval(
-        Task(
-            dataset=games_dataset("cutthroats"),
-            solver=walkthrough_solver(verified=True),
-            scorer=textquests_scorer(),
-        ),
-        model=get_model(MOCK_MODEL),
-        display="none",
-        log_dir=None,
-    )
-    assert log.status == "success"
-    value = score_value(first_sample(log))
-    assert value["points"] == 100.0
-    assert value["verified_finished"] == 1.0

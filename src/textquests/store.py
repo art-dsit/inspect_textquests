@@ -19,19 +19,9 @@ class StepLog(BaseModel):
 
 class TextQuestsStore(StoreModel):
     steps: int = 0
-    # Played in the verified environment, and scored from the live values below
-    verified: bool = False
-    # Live values over every step's result; the base task reports metrics from `log` instead
-    progress: int = 0
-    max_score: int = 0
-    harm: int = 0
-    # Percentages of the upstream and of the verified checkpoints reached
-    checkpoints: list[int] = Field(default_factory=list)
-    verified_checkpoints: list[int] = Field(default_factory=list)
-    verified_total: int = 0
     restores: int = 0
     restarts: int = 0
-    # "finished", "max_steps", "parse_failure", "provider_refusal", "context_limit",
-    # "walkthrough_exhausted", or "" if interrupted
+    # "finished", "max_steps", "parse_failure", "context_limit", "walkthrough_exhausted",
+    # or "" if interrupted
     ended: str = ""
     log: list[StepLog] = Field(default_factory=list)

@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from textquests.data import load_walkthrough
 from textquests.env import (
     MAX_ACTION_LENGTH,
     Annotation,
@@ -129,34 +128,6 @@ class TestZork1:
 
 
 @pytest.mark.dataset_download
-def test_verified_chained_quit_blocked(data_dir: Path) -> None:
-    env = TextQuestsEnv(data_dir / "zork1", verified=True)
-    assert env.step("wait. quit").observation == "Impossible."
-
-
-@pytest.mark.dataset_download
-def test_verified_overlong_action_is_not_matched_against_checkpoints(
-    data_dir: Path,
-) -> None:
-    env = TextQuestsEnv(data_dir / "zork1", verified=True)
-    checkpoints = env.progress_checkpoints
-    checkpoint = max(checkpoints, key=lambda text: checkpoints[text])
-    action = "look " + "x" * MAX_ACTION_LENGTH + " " + checkpoint
-    result = env.step(action)
-    assert checkpoint in result.observation.lower()
-    assert result.progress == 0 and env.game_progress == 0
-
-
-@pytest.mark.dataset_download
-def test_verified_restores_counted_across_restarts(data_dir: Path) -> None:
-    env = TextQuestsEnv(data_dir / "zork1", verified=True)
-    env.save_checkpoint("", env.reset())
-    env.step("restore 0")
-    env.step("restart")
-    assert (env.total_restarts, env.total_restores) == (1, 1)
-
-
-@pytest.mark.dataset_download
 def test_game_over_marker_blocks_actions(data_dir: Path) -> None:
     # Hitchhiker's Guide: stay in bed and the bulldozer demolishes the house around you
     env = TextQuestsEnv(data_dir / "hitchhiker")
@@ -180,187 +151,42 @@ def test_compressed_and_custom_reward_games(data_dir: Path) -> None:
     assert witness.step("look").score == 0, "no 'score' probe for these games"
 
 
-def actions_for(game: str, walkthrough_upto: int | None, then: list[str]) -> list[str]:
-    """The first actions of the bundled walkthrough (all of the fixed one for None), then more."""
-    if walkthrough_upto is None:
-        return load_walkthrough(game, fixed=True) + then
-    return load_walkthrough(game)[:walkthrough_upto] + then
-
-
-# Deaths the game recovers from: game, walkthrough actions, then actions to the death, its text
-RECOVERABLE_DEATHS = [
-    ("zork1", 0, ZORK1_DEATH, "You have died"),
-    ("zork2", 2, ["jump"], "You have died"),
-    ("zork3", 0, ["s", "s"], "You have died"),
-    ("enchanter", 169, ["open guarded door"] * 5, "You have died"),
-    ("spellbreaker", 146, ["climb idol"], "You have died"),
-    (
-        "starcross",
-        164,
-        ["s", "e", "e", "u", "close outer", "open inner", "u"],
-        "a feeling of dislocation",
-    ),
+FILE_COMMANDS = [
+    ("planetfall", "#record"),
+    ("planetfall", "look. #command"),
+    ("zork1", "go save"),
+    ("zork1", "look then script"),
+    ("witness", "suspend"),
+    ("witness", "continue"),
+    ("stationfall", "rescue"),
+]
+# Upstream's blacklist matches only the start of the whole action, so these get through
+PASSED_THROUGH = [
+    ("planetfall", "WAIT. SUPERBRIEF"),
+    ("zork1", "look then superbrief"),
+    ("zork1", "quit."),
+    ("zork1", "q "),
+    ("sherlock", "hint"),
+    ("borderzone", "hints"),
 ]
 
 
 @pytest.mark.dataset_download
-@pytest.mark.parametrize(
-    ("game", "upto", "then", "death"),
-    RECOVERABLE_DEATHS,
-    ids=[d[0] for d in RECOVERABLE_DEATHS],
-)
-def test_verified_recoverable_death_is_not_game_over(
-    data_dir: Path, game: str, upto: int, then: list[str], death: str
-) -> None:
-    env = TextQuestsEnv(data_dir / game, verified=True)
-    actions = actions_for(game, upto, then)
-    play(env, actions[:-1])
-    result = env.step(actions[-1])
-    assert death in result.observation
-    assert result.done is False
-    assert env.step("look").observation != "Impossible."
-
-
-# Endings: game, walkthrough actions, then actions up to the one that ends the game, ending text
-ENDINGS = [
-    ("hitchhiker", 0, ["wait"] * 8, "RESTART, RESTORE, or QUIT"),
-    (
-        "suspect",
-        155,
-        ["detective, arrest michael and alicia"],
-        "The story has come to an end.",
-    ),
-    ("wishbringer", None, [], "101 points out of 101"),
-    ("zork1", None, [], "Inside the Barrow"),
-    # No [EVENT: GAME OVER] marker
-    ("deadline", 79, ["jump"], "It is your last thought."),
-    ("deadline", 2, ["wait until 7:58"] + ["y"] * 71, "you go off into the sunset."),
-    (
-        "witness",
-        6,
-        ["wait until 9:05", "yes"] * 10,
-        "you should have taken a chair when Linder asked you to.",
-    ),
-    (
-        "zork3",
-        0,
-        ["s", "s", "n", "n"] * 4 + ["s", "s", "n"],
-        "It is the last you hear.",
-    ),
-    ("borderzone", 50, ["wait"], "(Type RESTART, RESTORE, HINT, or QUIT)"),
-]
-
-
-@pytest.mark.dataset_download
-@pytest.mark.parametrize(
-    ("game", "upto", "then", "ending"),
-    ENDINGS,
-    ids=[f"{e[0]}-{e[3][:20]}" for e in ENDINGS],
-)
-def test_verified_ending_is_game_over_on_the_turn_it_happens(
-    data_dir: Path, game: str, upto: int | None, then: list[str], ending: str
-) -> None:
-    actions = actions_for(game, upto, then)
-    env = TextQuestsEnv(data_dir / game, verified=True)
-    result = env.reset()
-    for action in actions[:-1]:
-        env.save_checkpoint(result.observation, result)
-        result = env.step(action)
-        assert not result.done, action
-    env.save_checkpoint(result.observation, result)
-    result = env.step(actions[-1])
-    assert ending in result.observation
-    assert result.done is True and env.state.game_over
-    refused = env.step("look")
-    assert refused.observation == "Impossible." and refused.done is True
-    restored = env.step(f"restore {len(actions) - 1}")
-    assert restored.done is False
-    assert env.step("look").observation != "Impossible."
-
-
-@pytest.mark.dataset_download
-def test_verified_text_after_an_unmarked_ending_is_cut(data_dir: Path) -> None:
-    # The game carries on after its QUIT: the jump prints "Wheeeeeeeeee!!!!!" too
-    env = TextQuestsEnv(data_dir / "deadline", verified=True)
-    observations = play(env, actions_for("deadline", 79, ["jump"]))
-    assert observations[-1].rstrip().endswith("It is your last thought.")
-
-
-@pytest.mark.dataset_download
-def test_verified_halted_interpreter_is_game_over_and_restore_recovers(
+@pytest.mark.parametrize(("game", "action"), FILE_COMMANDS + PASSED_THROUGH)
+def test_file_commands_are_blocked(
     data_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    game: str,
+    action: str,
 ) -> None:
-    # Witness at 8:00 a.m.: Klutz ends the case and the interpreter halts
-    env = TextQuestsEnv(data_dir / "witness", verified=True)
-    actions = actions_for("witness", 72, ["wait for 60 minutes", "yes", "yes"] * 7)
-    play(env, actions)
-    result = env.step("wait for 60 minutes")
-    assert "you go off into the sunrise." in result.observation
-    assert result.done is True
-    assert env.step("look").observation == "Impossible."
-    env.step(f"restore {len(actions) - 1}")
-    result = env.step("look")
-    assert result.observation.startswith("(office)") and result.done is False
-
-
-@pytest.mark.dataset_download
-@pytest.mark.parametrize(
-    ("game", "upto", "kept"),
-    [
-        ("deadline", 15, ["Time passes..."]),
-        (
-            "witness",
-            5,
-            [
-                "Suddenly, a clap of thunder rolls across the hills outside.",
-                "Without warning, lightning flashes outside",
-                "Rain begins to fall outside in a sprinkle.",
-            ],
-        ),
-        ("suspect", 68, ["Michael stops here."]),
-        (
-            "seastalker",
-            47,
-            ["You have just passed through the opening in the sea wall"],
-        ),
-    ],
-)
-def test_verified_status_line_redraws_removed_and_event_text_kept(
-    data_dir: Path, game: str, upto: int, kept: list[str]
-) -> None:
-    # Multi-turn waits from the walkthroughs: one status-line redraw per game minute or move
-    env = TextQuestsEnv(data_dir / game, verified=True)
-    walk = load_walkthrough(game, fixed=True)
-    observations = play(env, walk[: upto + 1])
-    joined = "\n".join(observations[-3:])
-    assert "Time:" not in joined and "Moves:" not in joined
-    for text in kept:
-        assert text in joined
-
-
-@pytest.mark.dataset_download
-def test_verified_compressed_prompt_split_across_reads_is_rejoined(
-    data_dir: Path,
-) -> None:
-    env = TextQuestsEnv(data_dir / "trinity", verified=True)
-    observations = play(env, actions_for("trinity", 255, ["s", "no"]))
-    assert observations[-2].endswith(
-        "Are you sure you want to go that way?\n\n[Please type YES or NO.] >"
-    )
-    assert "64]" not in observations[-1] and "[RIDX" not in observations[-1]
-    assert '"Smart move," sniggers a voice in your ear.' in observations[-1]
-
-
-@pytest.mark.dataset_download
-def test_verified_restart_only_on_the_restart_command(data_dir: Path) -> None:
-    env = TextQuestsEnv(data_dir / "zork1", verified=True)
-    play(env, ["north", "east", "open window", "west"])
-    for action in ['say "restart"', "computer, restart the countdown", "restarted"]:
-        assert not env.step(action).observation.startswith("ZORK I"), action
-    assert env.total_restarts == 0
-    assert env.step("look. restart").observation.startswith("ZORK I")
-    assert env.step("Restart!").observation.startswith("ZORK I")
-    assert env.total_restarts == 2
+    monkeypatch.chdir(tmp_path)
+    env = TextQuestsEnv(data_dir / game)
+    env.reset()
+    env.step("look")
+    blocked = env.step(action).observation == "Impossible."
+    assert blocked == ((game, action) in FILE_COMMANDS)
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_unknown_game_rejected(tmp_path: Path) -> None:

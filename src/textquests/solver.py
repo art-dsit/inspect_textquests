@@ -6,11 +6,9 @@ Results accumulate in TextQuestsStore after every step so the scorer still has t
 sample is cut short by an Inspect limit or an error.
 """
 
-import base64
 import json
 import re
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any, Literal
 
 import anyio
@@ -20,9 +18,6 @@ from inspect_ai.model import (
     ChatMessageAssistant,
     ChatMessageSystem,
     ChatMessageUser,
-    Content,
-    ContentImage,
-    ContentText,
     Model,
     ModelOutput,
     get_model,
@@ -31,17 +26,10 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai.util import store_as
 
 from textquests.data import ensure_data, load_walkthrough
-from textquests.env import (
-    PROGRESS_COMPLETE,
-    StepResult,
-    TextQuestsEnv,
-    game_finished,
-)
+from textquests.env import TextQuestsEnv, game_finished
 from textquests.prompts import (
-    FICTION_NOTE,
     GAME_OVER_FORMAT,
     JSON_GAME_OVER_FORMAT,
-    PACKAGE_SCANS_INTRO,
     canonical_response,
     json_canonical_response,
     json_system_prompt,
@@ -52,9 +40,6 @@ from textquests.store import StepLog, TextQuestsStore
 
 DEFAULT_MAX_STEPS = 500
 DEFAULT_SEED = 1
-# Most refusals clear on a resend. Capped because resending a prompt the provider's filter
-# has flagged can count against the account.
-VERIFIED_REFUSAL_ATTEMPTS = 10
 OutputFormat = Literal["xml", "json"]
 DEFAULT_OUTPUT_FORMAT: OutputFormat = "xml"
 # Each upstream harness's default: the maintained one (tags) 3, the original (JSON) 10
@@ -122,7 +107,6 @@ def textquests_solver(
     seed: int = DEFAULT_SEED,
     canonicalize_history: bool = True,
     output_format: OutputFormat = DEFAULT_OUTPUT_FORMAT,
-    verified: bool = False,
 ) -> Solver:
     """Play one game with the active model.
 
@@ -138,11 +122,6 @@ def textquests_solver(
         output_format: Reply format the prompts ask for: "xml" (``<reasoning>/<action>``
             tags, the maintained upstream harness) or "json" (a ``{"reasoning", "action"}``
             block, the original harness that produced the paper's results).
-        verified: End the game when it ends after the verified 100% checkpoint, not
-            on upstream's, whose string in several games also prints on a losing ending;
-            show the model, with the first turn, the scanned package items the game
-            cannot be finished without; and play in the corrected environment (see
-            `TextQuestsEnv`).
     """
     if output_format not in ("xml", "json"):
         raise ValueError(
@@ -167,8 +146,7 @@ def textquests_solver(
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         store = store_as(TextQuestsStore)
-        store.verified = verified
-        env = await _make_env(state, seed, verified)
+        env = await _make_env(state, seed)
         result = env.reset()
         prompt = make_system_prompt(
             game_name=env.game_name,
@@ -176,8 +154,6 @@ def textquests_solver(
             guidelines=env.guidelines,
             invisiclues=env.invisiclues if with_clues else "",
         )
-        if verified:
-            prompt = f"{FICTION_NOTE}\n\n{prompt}"
         state.messages = [ChatMessageSystem(content=prompt)]
         model = get_model()
         observation = result.observation
@@ -187,23 +163,9 @@ def textquests_solver(
             if game_over:
                 observation += game_over_format
             prompt = observation_prompt(result.score, observation, step)
-            if verified and step == 0 and env.package_scans:
-                content: list[Content] = [ContentText(text=PACKAGE_SCANS_INTRO)]
-                content += [
-                    ContentImage(image=_jpeg_data_uri(p)) for p in env.package_scans
-                ]
-                content.append(ContentText(text=prompt))
-                state.messages.append(ChatMessageUser(content=content))
-            else:
-                state.messages.append(ChatMessageUser(content=prompt))
+            state.messages.append(ChatMessageUser(content=prompt))
 
-            parsed = await _get_action(
-                model,
-                state.messages,
-                attempts,
-                parse,
-                refusal_attempts=VERIFIED_REFUSAL_ATTEMPTS if verified else 0,
-            )
+            parsed = await _get_action(model, state.messages, attempts, parse)
             if isinstance(parsed, str):
                 store.ended = parsed
                 break
@@ -235,7 +197,7 @@ def textquests_solver(
             )
             store.steps = step + 1
 
-            if _finished(env, result, verified):
+            if game_finished(result.progress, result.score, env.max_score):
                 store.ended = "finished"
                 break
 
@@ -243,7 +205,7 @@ def textquests_solver(
             result = env.step(action)
             observation = result.observation
             game_over = result.done
-            _record(store, result, env)
+            _record(store, env)
         else:
             store.ended = "max_steps"
 
@@ -253,19 +215,16 @@ def textquests_solver(
 
 
 @solver
-def walkthrough_solver(seed: int = DEFAULT_SEED, verified: bool = False) -> Solver:
+def walkthrough_solver(seed: int = DEFAULT_SEED) -> Solver:
     """Oracle: replay the game's bundled walkthrough instead of asking a model.
 
     Args:
         seed: Seed for the Z-machine interpreter's random number generator.
-        verified: Play in the corrected environment and end the game as
-            `textquests_solver(verified=True)` does.
     """
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         store = store_as(TextQuestsStore)
-        store.verified = verified
-        env = await _make_env(state, seed, verified)
+        env = await _make_env(state, seed)
         result = env.reset()
         actions = load_walkthrough(env.game_name, fixed=True)
         # One entry more than there are actions: the state after the last one is logged as
@@ -286,7 +245,7 @@ def walkthrough_solver(seed: int = DEFAULT_SEED, verified: bool = False) -> Solv
             exhausted = step == len(actions)
             if not exhausted:
                 store.steps = step + 1
-            if _finished(env, result, verified):
+            if game_finished(result.progress, result.score, env.max_score):
                 store.ended = "finished"
                 break
             if exhausted:
@@ -294,29 +253,15 @@ def walkthrough_solver(seed: int = DEFAULT_SEED, verified: bool = False) -> Solv
                 break
             env.save_checkpoint(result.observation, result)
             result = env.step(action)
-            _record(store, result, env)
+            _record(store, env)
         return state
 
     return solve
 
 
-def _jpeg_data_uri(path: Path) -> str:
-    return "data:image/jpeg;base64," + base64.b64encode(path.read_bytes()).decode()
-
-
-def _finished(env: TextQuestsEnv, result: StepResult, verified: bool) -> bool:
-    if verified:
-        # Several games award their last points after the 100% text, as the game ends
-        won = PROGRESS_COMPLETE in env.verified_reached and env.state.game_over
-        return won or result.score == env.max_score
-    return game_finished(result.progress, result.score, env.max_score)
-
-
-async def _make_env(state: TaskState, seed: int, verified: bool) -> TextQuestsEnv:
+async def _make_env(state: TaskState, seed: int) -> TextQuestsEnv:
     data = await anyio.to_thread.run_sync(ensure_data)
-    return TextQuestsEnv(
-        data / str(state.metadata["game"]), seed=seed, verified=verified
-    )
+    return TextQuestsEnv(data / str(state.metadata["game"]), seed=seed)
 
 
 async def _get_action(
@@ -324,16 +269,12 @@ async def _get_action(
     messages: list[ChatMessage],
     max_retries: int,
     parse: Callable[[str], tuple[Any, str | None]],
-    refusal_attempts: int = 0,
 ) -> tuple[Any, str, ModelOutput] | str:
     """Generate against the unchanged history until the reply contains an action.
 
-    Returns the parsed reply, or the reason the episode has to end. With
-    ``refusal_attempts``, a reply the provider's content filter refused is not counted
-    against ``max_retries`` but against that limit.
+    Returns the parsed reply, or the reason the episode has to end.
     """
-    attempt = refusals = 0
-    while attempt < max_retries:
+    for attempt in range(1, max_retries + 1):
         output = await model.generate(messages)
         reasoning, action = parse(output.completion)
         if action is not None:
@@ -341,16 +282,6 @@ async def _get_action(
         if output.stop_reason == "model_length":
             transcript().info("History no longer fits the model's context window.")
             return "context_limit"
-        if refusal_attempts and output.stop_reason == "content_filter":
-            refusals += 1
-            transcript().info(
-                f"The provider refused the prompt ({refusals}/{refusal_attempts}): "
-                f"{output.completion[:200]!r}"
-            )
-            if refusals == refusal_attempts:
-                return "provider_refusal"
-            continue
-        attempt += 1
         transcript().info(
             f"No action in model output (attempt {attempt}/{max_retries}): "
             f"{output.completion[:200]!r}"
@@ -358,12 +289,6 @@ async def _get_action(
     return "parse_failure"
 
 
-def _record(store: TextQuestsStore, result: StepResult, env: TextQuestsEnv) -> None:
-    store.progress = max(store.progress, result.progress)
-    store.max_score = max(store.max_score, result.score)
-    store.harm += result.harm
-    store.checkpoints = sorted(env.checkpoints_reached)
-    store.verified_checkpoints = sorted(env.verified_reached)
-    store.verified_total = len(set(env.verified_checkpoints.values()))
+def _record(store: TextQuestsStore, env: TextQuestsEnv) -> None:
     store.restores = env.total_restores
     store.restarts = env.total_restarts

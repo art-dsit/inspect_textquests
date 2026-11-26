@@ -30,21 +30,8 @@ MAX_SCORES: dict[str, int] = {
 
 GAMES = sorted(MAX_SCORES)
 
-# Items from the original package that a game cannot be finished without and that the manual
-# text given to the model leaves out. They are scans under feelies/scans in the data; the
-# Verified task shows them to the model. Sherlock needs its package newspaper (tide times),
-# which the data does not have.
-PACKAGE_SCANS = {
-    "ballyhoo": ["traveling-circus10.jpeg"],  # the radio station's frequency
-    "cutthroats": ["wrecks-map.jpeg"],  # wreck coordinates and depths
-    "infidel": ["infidel-map.jpeg"],  # where to dig
-    "lurkinghorror": ["gue6.jpeg"],  # the computer password
-    "plunderedhearts": ["fifty-guineas1.jpeg"],  # the pose that opens the portrait
-}
-
 # Upstream's blacklist: actions that can hang or break the interpreter, answered
-# "Impossible.". Matched case-insensitively against the whole action, as upstream does, except
-# in verified mode, where each command of a chained action is checked
+# "Impossible.". Matched case-insensitively against the whole action, as upstream does
 COMMON_BAD_ACTIONS = [
     "^brief.*",
     "^super.*",
@@ -72,13 +59,7 @@ EXTRA_BAD_ACTIONS = {
 UPSTREAM_BAD_ACTIONS = {
     game: EXTRA_BAD_ACTIONS.get(game, []) + COMMON_BAD_ACTIONS for game in GAMES
 }
-# Verified only: these two have a built-in hint menu that takes over the input and, with the
-# bare "q" blocked, cannot be left
-HINT_MENU_ACTIONS = {
-    "borderzone": ["^(?:hints?|help|clues?)$"],
-    "sherlock": ["^(?:hints?|help|clues?)$"],
-}
-# Not upstream, and blocked in every command of an action in both modes: commands that make
+# Not upstream, and blocked in every command of an action: commands that make
 # the interpreter write or read a file in the cwd. Frotz's own save/restore use <game>.qzl, an
 # uncounted rewind that survives across runs; "restore N" is handled by the env before the
 # blacklist is consulted. SCRIPT writes a transcript named after the input line. "#record" and
@@ -98,33 +79,4 @@ EXTRA_FILE_ACTIONS = {
 }
 FILE_COMMANDS = {
     game: FILE_ACTIONS + EXTRA_FILE_ACTIONS.get(game, []) for game in GAMES
-}
-# Everything the verified environment checks in each command of an action
-BAD_ACTIONS = {
-    game: EXTRA_BAD_ACTIONS.get(game, [])
-    + HINT_MENU_ACTIONS.get(game, [])
-    + COMMON_BAD_ACTIONS
-    + FILE_COMMANDS[game]
-    for game in GAMES
-}
-
-# Endings that print no [EVENT: GAME OVER] marker, by the end of the text the game prints
-# only there. Except in borderzone, whose FINISH waits for a CONTINUE that a failed chapter
-# cannot take, each is followed by the Z-machine's QUIT, which this interpreter does not stop
-# at: the game carries on as if the ending had not happened. Used by the verified environment.
-UNMARKED_ENDINGS: dict[str, tuple[str, ...]] = {
-    "borderzone": ("(Type RESTART, RESTORE, HINT, or QUIT)",),
-    "deadline": (
-        "you go off into the sunset.",  # the 8 pm time limit
-        "It is your last thought.",
-        "You fall back, into a long silence.",
-        "are the last you hear.",
-        "remove a gun, and end your life.",
-    ),
-    "witness": (
-        "a two-bit shamus!",
-        "you should have taken a chair when Linder asked you to.",
-        "sooner or later.",  # arriving too late, or quitting late
-    ),
-    "zork3": ("It is the last you hear.",),  # the fourth death
 }
