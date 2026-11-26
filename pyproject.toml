@@ -129,7 +129,7 @@ ignore_missing_imports = true
 [project]
 name = "textquests"
 description = "Inspect AI implementation of the TextQuests benchmark (25 Infocom text adventures via Jericho)"
-authors = [{ name = "Art O Cathain" }]
+authors = [{ name = "UK AI Security Institute" }]
 readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-2.0-or-later"
