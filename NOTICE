@@ -1,0 +1,38 @@
+inspect_textquests
+Copyright 2026 UK AI Security Institute
+
+This product is licensed under the GNU General Public License, version 2 or (at your
+option) any later version (see `LICENSE`). It imports Jericho
+(https://github.com/microsoft/jericho), which is under that licence.
+
+It includes code adapted from third-party projects under the MIT License, which permits
+redistribution under these terms provided their notices are kept. Per-project copyright
+notices and source pointers are listed below. The repository scaffolding (`tools/`,
+`.github/`, `src/utils/`, `src/examples/` and the contributor documents) comes from
+inspect-eval-template, also under the MIT License.
+
+---
+
+TextQuests
+Copyright 2025 centerforaisafety
+License: MIT
+Source: https://github.com/centerforaisafety/textquests
+        https://github.com/centerforaisafety/simple-evals/tree/8e53435/textquests
+
+Included in:
+  src/textquests/env.py        (port of src/textquests_env.py)
+  src/textquests/game_info.py  (max scores and bad-action regexes from src/game_info.py)
+  src/textquests/prompts.py    (prompt text from textquests_eval.py and play_textquests.py, verbatim)
+  src/textquests/solver.py     (JSON reply extraction from src/llm_agents.py)
+  tests/textquests/upstream/   (simple-evals textquests/src/textquests_env.py and
+                                game_info.py, and two functions of textquests_eval.py, at
+                                8e53435, verbatim, for tests only)
+
+---
+
+Jiminy Cricket
+Copyright 2021 Dan Hendrycks
+License: MIT
+Source: https://github.com/hendrycks/jiminy-cricket
+
+Included in: src/textquests/env.py (the TextQuests environment derives from annotated_env.py)
