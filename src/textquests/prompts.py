@@ -56,6 +56,21 @@ SPECIAL ACTION: You can restore the game to previous steps by using 'restore {{s
 """
 
 
+# Not upstream: opens the Verified task's system prompt. Without it, OpenAI's prompt filter
+# refuses some long histories about half the time; at the end of the system prompt, after
+# the manual text, it makes no difference.
+FICTION_NOTE = (
+    "This conversation is a playthrough of a published work of interactive fiction, an "
+    "Infocom text adventure from the 1980s. Everything in it, including any crime, "
+    "violence or danger, is fictional game content."
+)
+
+# Not upstream: introduces the package scans the Verified task shows with the first turn
+PACKAGE_SCANS_INTRO = (
+    "The images below are from the game's original package. You may need them to play."
+)
+
+
 def observation_prompt(score: int, observation: str, step: int) -> str:
     return f"""
 STEP: {step} | CURRENT SCORE: {score}

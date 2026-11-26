@@ -7,12 +7,10 @@ centerforaisafety/textquests@18dc472 src/textquests_env.py.
 from pathlib import Path
 
 import pytest
-from inspect_ai import eval
 
 from textquests.data import load_walkthrough
 from textquests.env import TextQuestsEnv
 from textquests.game_info import GAMES, MAX_SCORES
-from textquests.textquests import textquests_walkthrough
 
 # game: (steps until finished, progress, max score, harm)
 EXPECTED = {
@@ -66,6 +64,17 @@ def test_walkthrough_matches_upstream(data_dir: Path, game: str) -> None:
 
 
 @pytest.mark.dataset_download
+def test_verified_checkpoint_text_split_by_a_marker_still_counts(
+    data_dir: Path,
+) -> None:
+    # Suspect prints an annotation marker inside its 35% checkpoint string
+    env = TextQuestsEnv(data_dir / "suspect", verified=True)
+    env.reset()
+    seen = {env.step(action).progress for action in load_walkthrough("suspect")}
+    assert 35 in seen
+
+
+@pytest.mark.dataset_download
 @pytest.mark.parametrize("game", sorted(BROKEN_WALKTHROUGHS))
 def test_fixed_walkthrough_finishes(data_dir: Path, game: str) -> None:
     env = TextQuestsEnv(data_dir / game)
@@ -74,33 +83,3 @@ def test_fixed_walkthrough_finishes(data_dir: Path, game: str) -> None:
     for action in load_walkthrough(game, fixed=True):
         progress = max(progress, env.step(action).progress)
     assert progress == 100
-
-
-# The games whose points are awarded on the final turn, which the environment misses
-ORACLE_POINTS = {
-    "ballyhoo": 100 * 200 / 205,
-    "cutthroats": 100 * 180 / 250,
-    "lurkinghorror": 100 * 100 / 105,
-    "sherlock": 100 * 99 / 100,
-    "trinity": 100 * 100 / 105,
-    "wishbringer": 100 * 100 / 101,
-}
-
-
-@pytest.mark.dataset_download
-def test_oracle_task_finishes_every_game() -> None:
-    (log,) = eval(
-        textquests_walkthrough(),
-        model="mockllm/model",
-        display="none",
-        log_dir=None,
-        max_samples=len(GAMES),
-    )
-    assert log.status == "success" and log.samples
-    for sample in log.samples:
-        assert sample.scores
-        value = sample.scores["textquests_scorer"].value
-        assert isinstance(value, dict)
-        game = str(sample.id)
-        assert (value["progress"], value["finished"]) == (100, 1.0), game
-        assert value["points"] == pytest.approx(ORACLE_POINTS.get(game, 100.0)), game

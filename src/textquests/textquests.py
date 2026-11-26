@@ -95,6 +95,37 @@ def textquests(
     )
 
 
+# With the tag format GPT-5 loses games to replies that are only the word "analysis"
+VERIFIED_OUTPUT_FORMAT: OutputFormat = "json"
+# The provider's prompt filter and malformed replies come in runs of several
+VERIFIED_MAX_RETRIES = 10
+
+
+@task
+def textquests_verified(games: str | list[str] | None = None) -> Task:
+    """TextQuests Verified: the benchmark with corrected progress scoring.
+
+    Same games, prompts, environment and 500-step budget as `textquests`, with the settings
+    fixed. The headline metric is `verified_progress`: the share of each game's audited
+    checkpoints reached, in any order (see textquests/verified.py). A game ends on its
+    verified 100% checkpoint. Not comparable with the paper or leaderboard.
+
+    Args:
+        games: Game name or list of game names to run; all 25 by default.
+    """
+    return Task(
+        dataset=games_dataset(games),
+        solver=textquests_solver(
+            output_format=VERIFIED_OUTPUT_FORMAT,
+            max_retries=VERIFIED_MAX_RETRIES,
+            verified=True,
+        ),
+        scorer=textquests_scorer(),
+        version=EVAL_VERSION,
+        metadata={"output_format": VERIFIED_OUTPUT_FORMAT},
+    )
+
+
 @task
 def textquests_walkthrough(
     games: str | list[str] | None = None,
